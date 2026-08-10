@@ -23,6 +23,8 @@ const PAGE_META: Record<string, { title: string; crumb: string }> = {
   "/analyze": { title: "계약서 분석·요약", crumb: "계약 AI" },
   "/search": { title: "계약서 검색", crumb: "계약 AI" },
   "/draft": { title: "초안 작성 어시스트", crumb: "계약 AI" },
+  "/contracts": { title: "계약 대장", crumb: "계약 자산" },
+  "/risk": { title: "리스크 관리", crumb: "계약 자산" },
 };
 
 function activeIdFor(pathname: string): string {
@@ -30,13 +32,19 @@ function activeIdFor(pathname: string): string {
   if (pathname.startsWith("/analyze")) return "analyze";
   if (pathname.startsWith("/search")) return "search";
   if (pathname.startsWith("/draft")) return "draft";
+  if (pathname.startsWith("/contracts")) return "ledger";
+  if (pathname.startsWith("/risk")) return "risk";
   return "";
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeId = activeIdFor(pathname);
-  const meta = PAGE_META[pathname] ?? { title: "GS칼텍스 법무 AI", crumb: "워크스페이스" };
+  const meta =
+    PAGE_META[pathname] ??
+    (pathname.startsWith("/contracts/")
+      ? { title: "계약 상세", crumb: "계약 자산" }
+      : { title: "GS칼텍스 법무 AI", crumb: "워크스페이스" });
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {

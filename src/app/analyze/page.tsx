@@ -1,18 +1,23 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import Link from "next/link";
 import {
   UploadCloud, Sparkles, ShieldAlert, GitCompare, ListChecks,
   CheckCircle2, Loader2, RotateCcw, Download, ArrowRight, ScanText, Quote,
-  Database, FolderTree, Users, Clock, X, ShieldCheck, AlertTriangle,
+  Database, FolderTree, Users, Clock, X, ShieldCheck, AlertTriangle, Zap, Plus,
 } from "lucide-react";
 import { Pill, Tag, SectionCard, FileType, ScoreRing, Bar } from "@/components/kit";
 import { ContractChat } from "@/components/contract-chat";
 import {
   ANALYSIS, PIPELINE, SEG_LABEL, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
 } from "@/lib/data";
+import { searchRule } from "@/lib/risk";
+import { useStore } from "@/lib/store";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
+
+type DetectedRisk = (typeof ANALYSIS.risks)[number];
 
 type Phase = "idle" | "processing" | "done";
 type Ledger = "idle" | "confirm" | "running" | "done";
@@ -26,9 +31,45 @@ export default function AnalyzePage() {
   const [tab, setTab] = useState<"one" | "key" | "clause">("one");
   const [ledger, setLedger] = useState<Ledger>("idle");
   const [ledgerStep, setLedgerStep] = useState(0);
+  /* 탐지 리스크 label → 등록된 규칙 id */
+  const [registered, setRegistered] = useState<Record<string, string>>({});
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const { rules, addRule, setApplied } = useStore();
+  const critCount = ANALYSIS.risks.filter((r) => r.level === "crit").length;
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  /* ---------- 탐지된 리스크를 규칙으로 등록 ---------- */
+  const registerRisk = useCallback((r: DetectedRisk, silent = false) => {
+    const { rule, created } = addRule({
+      title: r.label,
+      desc: `${ANALYSIS.file.name} 분석에서 탐지 — ${r.note}`,
+      level: r.level as "crit" | "warn",
+      keywords: [...r.keywords],
+      mode: r.mode,
+      source: "analysis",
+      sourceRef: "C-24817",
+      applied: true,
+    });
+    if (!created) setApplied(rule.id, true);
+    setRegistered((prev) => ({ ...prev, [r.label]: rule.id }));
+    if (!silent) {
+      const hits = searchRule(rule).length;
+      toast(created
+        ? `『${r.label}』을(를) 등록해 계약 ${hits}건에 적용했습니다`
+        : `이미 있는 규칙에 연결했습니다 — 계약 ${hits}건 적용`);
+    }
+    return rule;
+  }, [addRule, setApplied]);
+
+  const registerAllRisks = useCallback(() => {
+    let total = 0;
+    for (const r of ANALYSIS.risks) {
+      const rule = registerRisk(r, true);
+      total += searchRule(rule).length;
+    }
+    toast(`탐지된 리스크 ${ANALYSIS.risks.length}건을 등록했습니다 — 계약 ${total}건에 적용`);
+  }, [registerRisk]);
 
   const run = useCallback((name?: string) => {
     timers.current.forEach(clearTimeout);
@@ -327,7 +368,7 @@ export default function AnalyzePage() {
                   <div className="flex flex-col gap-2.5">
                     <div className="flex flex-col gap-2 text-[12.3px]">
                       <InfoRow ico={<ListChecks size={13} />} k="검증된 필드" v={`${ANALYSIS.fields.length}개 전부 확인`} />
-                      <InfoRow ico={<ShieldAlert size={13} />} k="미해소 리스크" v={`고위험 1건 · 주의 ${ANALYSIS.risks.length - 1}건`} warn />
+                      <InfoRow ico={<ShieldAlert size={13} />} k="미해소 리스크" v={`고위험 ${critCount}건 · 주의 ${ANALYSIS.risks.length - critCount}건`} warn />
                       <InfoRow ico={<FolderTree size={13} />} k="저장 위치" v={LEDGER_TARGET.path} />
                     </div>
                     <button
@@ -344,18 +385,55 @@ export default function AnalyzePage() {
               </SectionCard>
 
               {/* risk */}
-              <SectionCard title="리스크 플래그" icon={<ShieldAlert size={17} className="text-[var(--red)]" />} sub="사내 표준 대비 초과·미비 조항" bodyClass="p-4">
+              <SectionCard
+                title="리스크 플래그"
+                icon={<ShieldAlert size={17} className="text-[var(--red)]" />}
+                sub="탐지된 리스크를 규칙으로 등록하면 전체 계약에서 같은 조항을 찾아 적용합니다"
+                bodyClass="p-4"
+                right={
+                  <button
+                    onClick={registerAllRisks}
+                    className="flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-2.5 text-[11.5px] font-bold text-white transition hover:bg-[var(--accent-600)]"
+                  >
+                    <Zap size={13} /> 전체 등록·적용
+                  </button>
+                }
+              >
                 <div className="flex flex-col gap-2.5">
-                  {ANALYSIS.risks.map((r) => (
-                    <div key={r.label} className={cn("flex items-center gap-3 rounded-[11px] border p-3", r.level === "crit" ? "border-[var(--red-line)] bg-[var(--red-soft)]" : "border-[var(--amber-line)] bg-[var(--amber-soft)]")}>
-                      <ShieldAlert size={18} className={r.level === "crit" ? "text-[var(--red)]" : "text-[var(--amber)]"} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-bold text-t1">{r.label}</div>
-                        <div className="text-[11.5px] text-t3">{r.note}</div>
+                  {ANALYSIS.risks.map((r) => {
+                    const reg = registered[r.label];
+                    const rule = reg ? rules.find((x) => x.id === reg) : undefined;
+                    const hits = rule ? searchRule(rule).length : 0;
+                    return (
+                      <div key={r.label} className={cn("rounded-[11px] border p-3", r.level === "crit" ? "border-[var(--red-line)] bg-[var(--red-soft)]" : "border-[var(--amber-line)] bg-[var(--amber-soft)]")}>
+                        <div className="flex items-center gap-3">
+                          <ShieldAlert size={18} className={r.level === "crit" ? "text-[var(--red)]" : "text-[var(--amber)]"} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-bold text-t1">{r.label}</div>
+                            <div className="text-[11.5px] text-t3">{r.note}</div>
+                          </div>
+                          <Pill tone={r.level === "crit" ? "crit" : "warn"}>{RISK_LABEL[r.level as keyof typeof RISK_LABEL]}</Pill>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex flex-wrap gap-1">
+                            {r.keywords.map((k) => <Tag key={k} className="h-[17px] bg-white/70 text-[9.5px]">{k}</Tag>)}
+                          </div>
+                          {rule ? (
+                            <Link href="/risk" className="ml-auto flex h-[26px] items-center gap-1.5 rounded-[7px] border border-[var(--green-line)] bg-[var(--green-soft)] px-2.5 text-[11px] font-bold text-[#0a6b42]">
+                              <CheckCircle2 size={12} /> 등록됨 · {hits}건 적용
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={() => registerRisk(r)}
+                              className="ml-auto flex h-[26px] items-center gap-1.5 rounded-[7px] border border-line bg-white px-2.5 text-[11px] font-bold text-t2 transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                            >
+                              <Plus size={12} /> 리스크 등록
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <Pill tone={r.level === "crit" ? "crit" : "warn"}>{RISK_LABEL[r.level as keyof typeof RISK_LABEL]}</Pill>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div className="mt-1 flex items-center justify-between rounded-[11px] bg-surface-2 px-3.5 py-3">
                     <span className="text-[12.5px] font-semibold text-t2">종합 리스크 점수</span>
                     <div className="flex items-center gap-2.5">

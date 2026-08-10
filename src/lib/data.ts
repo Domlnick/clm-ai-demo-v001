@@ -108,10 +108,12 @@ export const ANALYSIS = {
     { no: "제19조", title: "비밀유지", risk: "ok", body: "계약 종료 후 3년간 존속. 표준 조항.", tags: ["비밀유지"] },
     { no: "제22조", title: "준거법·분쟁해결", risk: "ok", body: "대한민국 법, 서울중앙지법 전속 관할. 표준.", tags: ["준거법", "관할"] },
   ],
+  /* keywords/mode — 리스크 관리에 규칙으로 등록할 때 쓰는 탐지 조건 */
   risks: [
-    { level: "crit", label: "손해배상 한도 100%", note: "표준 30% 대비 3.3배" },
-    { level: "warn", label: "지연배상 상한 미설정", note: "무한 노출 가능" },
-    { level: "warn", label: "단가 변동 ±5% 캡", note: "원자재가 급등 시 부족" },
+    { level: "crit", label: "손해배상 한도 100%", note: "표준 30% 대비 3.3배", keywords: ["손해배상", "100%"], mode: "all" as const },
+    { level: "warn", label: "지연배상 상한 미설정", note: "무한 노출 가능", keywords: ["지연배상", "상한은 정하지"], mode: "all" as const },
+    { level: "crit", label: "비밀정보 유출 시 한도 예외", note: "책임 상한이 사실상 무력화", keywords: ["비밀정보", "예외로 한다"], mode: "all" as const },
+    { level: "warn", label: "단가 변동 ±5% 캡", note: "원자재가 급등 시 부족", keywords: ["단가", "±5%"], mode: "all" as const },
   ],
   similar: [
     { id: "C-19004", title: "여수1공장 촉매 공급계약(2023)", sim: 94, party: "한화솔루션", note: "손배 한도 30% · 참고 기준" },

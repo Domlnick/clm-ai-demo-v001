@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/toast";
+import { StoreProvider } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "GS칼텍스 법무 AI · 계약서 분류·요약 시스템",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="antialiased">
-        <AppShell>{children}</AppShell>
+        <StoreProvider>
+          <AppShell>{children}</AppShell>
+        </StoreProvider>
         <Toaster />
       </body>
     </html>
