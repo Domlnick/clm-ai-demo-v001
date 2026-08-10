@@ -1,26 +1,177 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* ============================================================
+   GS칼텍스 법무 계약서 AI — Design System
+   기획서(teal) 팔레트 + 레퍼런스 앱 컴포넌트 구조
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* surfaces */
+  --bg: #f4f7f8;
+  --surface: #ffffff;
+  --sidebar: #f8fafb;
+  --surface-2: #f1f5f6;
+  --surface-3: #eaf0f1;
+  --line: #dde5e7;
+  --line-soft: #e9eef0;
+  --line-strong: #cdd8db;
+
+  /* text */
+  --t1: #16222b;
+  --t2: #3a4c55;
+  --t3: #66808a;
+  --t4: #96abb2;
+
+  /* brand — teal accent (기획서) */
+  --accent: #0f6e82;
+  --accent-600: #0c5f71;
+  --accent-700: #0a4e5d;
+  --accent-grad: linear-gradient(135deg, #12768c 0%, #1a9ab0 100%);
+  --accent-soft: #e2f0f3;
+  --accent-soft-2: #d3e8ec;
+  --accent-text: #0a4e5d;
+
+  /* status */
+  --red: #c0392b;      --red-soft: #fbeae7;   --red-line: #f2cec8;
+  --amber: #b0740b;    --amber-soft: #fbf1de; --amber-line: #f0dcac;
+  --green: #1e7a52;    --green-soft: #e3f2ea; --green-line: #b6ddc7;
+  --blue: #1f6f9c;     --blue-soft: #e5f0f7;
+  --violet: #6d5bd0;   --violet-soft: #ece9fb;
+
+  /* radius / shadow */
+  --radius: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --shadow-card: 0 1px 2px rgba(16,34,43,.04), 0 1px 3px rgba(16,34,43,.06);
+  --shadow-pop: 0 8px 28px rgba(16,34,43,.12), 0 2px 6px rgba(16,34,43,.06);
+  --sidebar-w: 264px;
+
+  --font: 'Pretendard', 'Inter', -apple-system, 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --num: 'Inter', 'Pretendard', sans-serif;
+
+  /* ===== shadcn tokens ===== */
+  --background: var(--bg);
+  --foreground: var(--t1);
+  --card: var(--surface);
+  --card-foreground: var(--t1);
+  --popover: var(--surface);
+  --popover-foreground: var(--t1);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--t2);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--t3);
+  --accent-color: var(--accent-soft);
+  --accent-foreground: var(--accent-text);
+  --destructive: var(--red);
+  --destructive-foreground: #ffffff;
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+  --radius-shadcn: 0.75rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--t1);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--t1);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--t1);
+  --color-primary: var(--accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--t2);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--t3);
+  --color-accent: var(--accent-soft);
+  --color-accent-foreground: var(--accent-text);
+  --color-destructive: var(--red);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+
+  /* custom palette exposed to utilities */
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-sidebar: var(--sidebar);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-t3: var(--t3);
+  --color-t4: var(--t4);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-ok: var(--green);
+  --color-ok-soft: var(--green-soft);
+  --color-warn: var(--amber);
+  --color-warn-soft: var(--amber-soft);
+  --color-crit: var(--red);
+  --color-crit-soft: var(--red-soft);
+  --color-info: var(--blue);
+  --color-info-soft: var(--blue-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+
+  --font-sans: var(--font);
+  --font-num: var(--num);
+
+  --radius-lg: var(--radius);
+  --radius-md: var(--radius-md);
+  --radius-sm: var(--radius-sm);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--t1);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  word-break: keep-all;
 }
+.num { font-family: var(--num); font-feature-settings: "tnum" 1; }
+::selection { background: #c9e6ec; color: #0a3540; }
+
+/* scrollbar */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #d3dcdf; border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: #bcc9cd; }
+
+/* ============ REUSABLE PIECES ============ */
+
+/* soft entrance */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-up { animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) both; }
+.animate-fade-in { animation: fadeIn .45s ease both; }
+
+/* typing dots */
+@keyframes typing { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-5px); opacity: 1; } }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--t4); display: inline-block; animation: typing 1.2s infinite; }
+.typing i:nth-child(2) { animation-delay: .2s; }
+.typing i:nth-child(3) { animation-delay: .4s; }
+
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+.blink-dot { animation: blink 1.2s infinite; }
+
+/* gradient text util */
+.grad-accent { background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* file-type chips */
+.ft { display:inline-flex; align-items:center; justify-content:center; font-weight:800; color:#fff; font-family:var(--num); }
+.ft-pdf { background:#c0392b; } .ft-hwp { background:#1f6f9c; } .ft-docx { background:#2b5797; }
+.ft-xlsx { background:#12864a; } .ft-txt { background:#7c8698; } .ft-img { background:#8a5cc0; }
+
+/* mark highlight */
+mark { background:#fdf0c2; color:#7a5300; border-radius:3px; padding:0 2px; font-weight:700; }
