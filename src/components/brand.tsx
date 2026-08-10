@@ -1,52 +1,66 @@
 /* ============================================================
-   브랜드 마크
+   브랜드 마크 — GS칼텍스 공식 CI 에셋 사용
    ------------------------------------------------------------
-   공식 CI 에셋으로 교체하려면 `public/brand/gs-caltex.svg`를 넣고
-   BrandMark 내부를 <img src="/brand/gs-caltex.svg" .../> 로 바꾸면 됩니다.
-   (아래 마크는 GS칼텍스 브랜드 컬러를 사용한 프로토타입용 대체 마크입니다)
+   원본: public/brand/gs-caltex.jpeg (738x216, 흰 배경)
+   심볼 영역은 좌측 216x216 정사각 구간이라, BrandMark는 그 부분만
+   잘라 쓰고 BrandLockup은 심볼+워드마크 전체를 씁니다.
    ============================================================ */
 
+import Image from "next/image";
+
+const SRC = "/brand/gs-caltex.jpeg";
+const W = 738;
+const H = 216;
+/** 워드마크를 뺀 심볼 영역의 가로 비율 */
+const SYMBOL_RATIO = 216 / W;
+
 export const BRAND = {
-  red: "#E8380D",
-  orange: "#F7A823",
-  deep: "#A8121B",
-  grad: "linear-gradient(135deg,#F7A823 0%,#EE3124 54%,#A8121B 100%)",
+  blue: "#1a52a8",
+  orange: "#ef7d00",
+  green: "#3aa935",
 };
 
-export function BrandMark({ size = 28, radius = 9 }: { size?: number; radius?: number }) {
+/** 심볼만 (사이드바·아바타 등 좁은 자리) */
+export function BrandMark({ size = 28 }: { size?: number }) {
   return (
     <span
-      className="flex flex-shrink-0 items-center justify-center"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius,
-        background: BRAND.grad,
-        boxShadow: "0 2px 8px rgba(232,56,13,.35)",
-      }}
+      className="relative flex flex-shrink-0 overflow-hidden bg-white"
+      style={{ width: size, height: size }}
     >
-      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" fill="none" aria-hidden>
-        {/* GS 심볼을 단순화한 원형 스트로크 + 하이라이트 */}
-        <circle cx="12" cy="12" r="8.4" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="40 12" transform="rotate(-38 12 12)" />
-        <circle cx="12" cy="12" r="3.1" fill="#fff" />
-      </svg>
+      <Image
+        src={SRC}
+        alt=""
+        width={W}
+        height={H}
+        priority
+        style={{ width: size / SYMBOL_RATIO, height: "auto", maxWidth: "none" }}
+      />
     </span>
   );
 }
 
+/** 헤더용 — 공식 로고 + 제품명 */
 export function BrandLockup({ compact = false }: { compact?: boolean }) {
+  if (compact) return <BrandMark size={28} />;
   return (
     <span className="flex items-center gap-2.5">
-      <BrandMark size={28} />
-      {!compact && (
-        <span className="flex flex-col leading-none">
-          <span className="text-[14.5px] font-extrabold tracking-[-.3px] text-t1">
-            GS<span style={{ color: BRAND.red }}>칼텍스</span>{" "}
-            <span className="grad-accent">법무 AI</span>
-          </span>
-          <span className="mt-[3px] text-[10px] font-medium text-t3">계약서 지능형 분류·요약 시스템</span>
+      <Image
+        src={SRC}
+        alt="GS칼텍스"
+        width={W}
+        height={H}
+        priority
+        className="h-[26px] w-auto"
+      />
+      <span className="h-[26px] w-px bg-line" />
+      <span className="flex flex-col leading-none">
+        <span className="text-[14.5px] font-extrabold tracking-[-.3px] text-t1">
+          <span className="grad-accent">법무 AI</span>
         </span>
-      )}
+        <span className="mt-[3px] text-[10px] font-medium text-t3">
+          계약서 지능형 분류·요약 시스템
+        </span>
+      </span>
     </span>
   );
 }
