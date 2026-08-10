@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   UploadCloud, Sparkles, ShieldAlert, GitCompare, ListChecks,
   CheckCircle2, Loader2, RotateCcw, Download, ArrowRight, ScanText, Quote,
   Database, FolderTree, Users, Clock, X, ShieldCheck, AlertTriangle, Zap, Plus,
+  BookCheck, Check,
 } from "lucide-react";
 import { Pill, Tag, SectionCard, FileType, ScoreRing, Bar } from "@/components/kit";
 import { ContractChat } from "@/components/contract-chat";
@@ -13,6 +14,11 @@ import {
   ANALYSIS, PIPELINE, SEG_LABEL, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
 } from "@/lib/data";
 import { searchRule } from "@/lib/risk";
+import { getContract } from "@/lib/contracts";
+import {
+  PB_ITEM_STATE_META, evaluateContract, playbookForContract, reviewLabel,
+  summarizeEval, ruleKeywordsFor,
+} from "@/lib/playbooks";
 import { useStore } from "@/lib/store";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
@@ -34,8 +40,37 @@ export default function AnalyzePage() {
   /* 탐지 리스크 label → 등록된 규칙 id */
   const [registered, setRegistered] = useState<Record<string, string>>({});
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const { rules, addRule, setApplied } = useStore();
+  const { rules, addRule, setApplied, playbooks } = useStore();
   const critCount = ANALYSIS.risks.filter((r) => r.level === "crit").length;
+
+  /* 분석 대상은 코퍼스의 C-24817 — 실제 조항 원문으로 플레이북과 대조한다 */
+  const pbTarget = getContract("C-24817");
+  const activePb = pbTarget ? playbookForContract(pbTarget, playbooks) : undefined;
+  const pbEvals = useMemo(
+    () => (activePb && pbTarget ? evaluateContract(activePb, pbTarget) : []),
+    [activePb, pbTarget],
+  );
+  const pbSummary = summarizeEval(pbEvals);
+
+  const registerPbDeviations = useCallback(() => {
+    const devs = pbEvals.filter((e) => e.state === "deviation");
+    let total = 0;
+    for (const e of devs) {
+      const res = addRule({
+        title: `${e.item.title} — 플레이북 기준 이탈`,
+        desc: `${activePb?.title} ${e.item.no}: ${e.item.standard}`,
+        level: e.item.level,
+        keywords: ruleKeywordsFor(e.item),
+        mode: "all",
+        source: "playbook",
+        sourceRef: `${activePb?.id} · ${e.item.no}`,
+        applied: true,
+      });
+      if (!res.created && !res.rule.applied) setApplied(res.rule.id, true);
+      total += searchRule(res.rule).length;
+    }
+    toast(`이탈 ${devs.length}건을 리스크 규칙으로 등록했습니다 — 계약 ${total}건에 적용`);
+  }, [pbEvals, activePb, addRule, setApplied]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
@@ -205,6 +240,16 @@ export default function AnalyzePage() {
                 {ledger === "done" && (
                   <Pill tone="ok" dot>대장 등록됨 · {LEDGER_TARGET.newId}</Pill>
                 )}
+                {activePb && (
+                  <button
+                    onClick={() => document.getElementById("pb-diff")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    title="플레이북 대비 차이로 이동"
+                  >
+                    <Pill tone={pbSummary.deviation > 0 ? "crit" : "ok"} dot>
+                      플레이북 {pbSummary.deviation > 0 ? `이탈 ${pbSummary.deviation}` : "전부 준수"}
+                    </Pill>
+                  </button>
+                )}
               </div>
               <div className="num mt-0.5 text-[12px] text-t4">{ANALYSIS.file.size} · {ANALYSIS.file.pages}p · {ANALYSIS.meta.language}</div>
             </div>
@@ -286,6 +331,100 @@ export default function AnalyzePage() {
                   </div>
                 )}
               </SectionCard>
+
+              {/* 플레이북 대비 차이 */}
+              <div id="pb-diff">
+                <SectionCard
+                  title="플레이북 대비 차이"
+                  icon={<BookCheck size={17} className="text-[var(--accent)]" />}
+                  sub={
+                    activePb
+                      ? `${activePb.dept} ${activePb.title} ${activePb.versions[activePb.versions.length - 1].v} 기준 · ${reviewLabel(activePb)}`
+                      : "이 계약 유형에 맞는 확정 플레이북이 없습니다"
+                  }
+                  bodyClass="p-0"
+                  right={
+                    activePb && (
+                      <Link href={`/playbook/${activePb.id}`} className="flex h-[30px] items-center gap-1 rounded-[8px] border border-line px-2.5 text-[11.5px] font-bold text-t2 transition hover:bg-surface-2">
+                        플레이북 <ArrowRight size={12} />
+                      </Link>
+                    )
+                  }
+                >
+                  {!activePb || !pbTarget ? (
+                    <p className="px-5 py-8 text-center text-[12.5px] text-t4">
+                      대조할 확정 플레이북이 없습니다. 협상 플레이북에서 먼저 기준을 확정해 주세요.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-5 py-3.5">
+                        <div className="flex items-baseline gap-1">
+                          <span className="num text-[26px] font-bold leading-none tracking-[-1px] text-[var(--red)]">{pbSummary.deviation}</span>
+                          <span className="text-[12px] text-t3">개 항목이 플레이북과 다릅니다</span>
+                        </div>
+                        <div className="ml-auto flex flex-wrap items-center gap-2">
+                          <Pill tone="crit" dot>다름 {pbSummary.deviation}</Pill>
+                          <Pill tone="ok" dot>준수 {pbSummary.ok}</Pill>
+                          <Pill tone="warn" dot>미규정 {pbSummary.missing}</Pill>
+                        </div>
+                      </div>
+                      {pbEvals.map((e) => (
+                        <div key={e.item.id} className="border-b border-line-soft px-5 py-3.5 last:border-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="num flex h-[24px] items-center rounded-[7px] bg-surface-3 px-2 text-[11px] font-extrabold text-t3">{e.item.no}</span>
+                            <span className="text-[13.5px] font-bold text-t1">{e.item.title}</span>
+                            <Pill tone={PB_ITEM_STATE_META[e.state].tone} className="h-[19px] text-[10.5px]">{PB_ITEM_STATE_META[e.state].label}</Pill>
+                            <span className="num ml-auto text-[11px] text-t4">
+                              {e.clause ? `${e.clause.no} ${e.clause.title}` : "해당 조항 없음"}
+                            </span>
+                          </div>
+                          {e.state === "ok" ? (
+                            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-t3">
+                              <Check size={13} className="text-[var(--green)]" /> 기준 충족 — {e.item.standard}
+                            </p>
+                          ) : e.state === "missing" ? (
+                            <div className="mt-2 rounded-[11px] border border-[var(--amber-line)] bg-[var(--amber-soft)] p-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-[#93610a]/80">이 계약에는 대응 조항이 없습니다</span>
+                              <p className="mt-1 text-[12.5px] leading-[1.7] text-t2">권장 문안 · {e.item.standard}</p>
+                            </div>
+                          ) : (
+                            <div className="mt-2 grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                              <div className="rounded-[11px] border border-[var(--red-line)] bg-[var(--red-soft)] p-3">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-[#a52f22]/80">
+                                  이 계약 · {e.clause?.no} {e.clause?.title}
+                                </span>
+                                <p className="mt-1 text-[12.5px] leading-[1.7] text-t2">{e.clause?.body}</p>
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {e.deviated.map((d) => (
+                                    <Tag key={d} className="h-[17px] bg-white/70 text-[9.5px] text-[#a52f22]">{d}</Tag>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="rounded-[11px] border border-[#bcd9e0] bg-[var(--accent-soft)] p-3">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent-text)]/70">플레이북 기준 · {e.item.no}</span>
+                                <p className="mt-1 text-[12.5px] font-semibold leading-[1.7] text-[var(--accent-text)]">{e.item.standard}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {pbSummary.deviation > 0 && (
+                        <div className="flex flex-wrap items-center gap-2.5 border-t border-line-soft bg-surface-2 px-5 py-3">
+                          <span className="min-w-0 flex-1 text-[11.5px] text-t3">
+                            이탈 항목을 리스크 규칙으로 등록하면 같은 조항이 있는 다른 계약에도 적용됩니다.
+                          </span>
+                          <button
+                            onClick={registerPbDeviations}
+                            className="flex h-[32px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3.5 text-[12.5px] font-bold text-white transition hover:bg-[var(--accent-600)]"
+                          >
+                            <Zap size={14} /> 이탈 {pbSummary.deviation}건 리스크로 등록
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </SectionCard>
+              </div>
 
               {/* 선례 비교 채팅 */}
               <ContractChat

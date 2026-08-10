@@ -14,8 +14,12 @@
 import { useSyncExternalStore } from "react";
 import { CONTRACTS, type ContractStatus } from "./contracts";
 import { SEED_RULES, type RiskRule, type RiskLevel, type RuleSource, type MatchMode } from "./risk";
+import {
+  PLAYBOOKS, bumpVersion, ruleKeywordsFor,
+  type PbChange, type PbStatus, type PbSuggestion, type Playbook, type PlaybookItem,
+} from "./playbooks";
 
-const KEY = "legalai_state_v1";
+const KEY = "legalai_state_v2";
 
 export type NewRule = {
   title: string;
@@ -33,12 +37,17 @@ type State = {
   statuses: Record<string, ContractStatus>;
   /** 버전 변경 항목 id → 등록된 리스크 규칙 id */
   flaggedChanges: Record<string, string>;
+  playbooks: Playbook[];
+  /** 플레이북 항목 id → 등록된 리스크 규칙 id */
+  pbRules: Record<string, string>;
 };
 
 const seedState = (): State => ({
   rules: SEED_RULES,
   statuses: Object.fromEntries(CONTRACTS.map((c) => [c.id, c.status])),
   flaggedChanges: {},
+  playbooks: PLAYBOOKS,
+  pbRules: {},
 });
 
 /* 서버 렌더 / 하이드레이션 때 쓰는 고정 스냅샷 */
@@ -58,6 +67,9 @@ function load(): State {
         rules: Array.isArray(parsed.rules) && parsed.rules.length ? parsed.rules : base.rules,
         statuses: { ...base.statuses, ...(parsed.statuses ?? {}) },
         flaggedChanges: parsed.flaggedChanges ?? {},
+        playbooks:
+          Array.isArray(parsed.playbooks) && parsed.playbooks.length ? parsed.playbooks : base.playbooks,
+        pbRules: parsed.pbRules ?? {},
       };
     }
   } catch {
@@ -172,6 +184,140 @@ export function unflagChange(changeId: string) {
   });
 }
 
+/* ============================================================
+   플레이북
+   ============================================================ */
+const today = () => new Date().toISOString().slice(0, 10);
+
+function patchPb(pbId: string, fn: (p: Playbook) => Playbook) {
+  update((s) => ({ ...s, playbooks: s.playbooks.map((p) => (p.id === pbId ? fn(p) : p)) }));
+}
+
+/** 항목 수정 — 무엇이 바뀌었는지 대기 변경으로 기록한다 */
+export function updatePbItem(pbId: string, itemId: string, patch: Partial<PlaybookItem>, note?: string) {
+  patchPb(pbId, (p) => {
+    const item = p.items.find((i) => i.id === itemId);
+    if (!item) return p;
+    const changes: PbChange[] = [];
+    if (patch.standard && patch.standard !== item.standard) {
+      changes.push({ id: nextId("pc"), field: `${item.no} ${item.title} · 기준 문구`, before: item.standard, after: patch.standard });
+    }
+    if (patch.detect && patch.detect.join() !== item.detect.join()) {
+      changes.push({ id: nextId("pc"), field: `${item.no} ${item.title} · 탐지 키워드`, before: item.detect.join(", "), after: patch.detect.join(", ") });
+    }
+    if (patch.deviation && patch.deviation.join() !== item.deviation.join()) {
+      changes.push({ id: nextId("pc"), field: `${item.no} ${item.title} · 이탈 키워드`, before: item.deviation.join(", ") || "없음", after: patch.deviation.join(", ") || "없음" });
+    }
+    if (changes.length === 0) return p;
+    if (note) changes[0] = { ...changes[0], field: `${changes[0].field} (${note})` };
+    return {
+      ...p,
+      items: p.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
+      pending: [...p.pending, ...changes],
+      /* 확정본을 손대면 다시 검토 단계로 돌아간다 */
+      status: p.status === "confirmed" || p.status === "change_requested" ? "review" : p.status,
+    };
+  });
+}
+
+/** AI 제안 채택 */
+export function acceptPbSuggestion(pbId: string, sug: PbSuggestion) {
+  const pb = getSnapshot().playbooks.find((p) => p.id === pbId);
+  const item = pb?.items.find((i) => i.id === sug.itemId);
+  if (!pb || !item) return;
+  updatePbItem(
+    pbId,
+    sug.itemId,
+    {
+      standard: sug.after,
+      ...(sug.detect ? { detect: sug.detect } : {}),
+      ...(sug.deviation ? { deviation: sug.deviation } : {}),
+    },
+    "AI 제안 채택",
+  );
+  /* 채택한 제안은 다시 뜨지 않도록 */
+  patchPb(pbId, (p) => ({ ...p, dismissed: [...p.dismissed, sug.id] }));
+}
+
+export function dismissPbSuggestion(pbId: string, sugId: string) {
+  patchPb(pbId, (p) => ({ ...p, dismissed: [...p.dismissed, sugId] }));
+}
+
+export function setPbStatus(pbId: string, status: PbStatus) {
+  patchPb(pbId, (p) => ({ ...p, status }));
+}
+
+export function resolvePbRequest(pbId: string, reqId: string) {
+  patchPb(pbId, (p) => ({
+    ...p,
+    requests: p.requests.map((r) => (r.id === reqId ? { ...r, resolved: true } : r)),
+  }));
+}
+
+/** 대기 중 변경을 새 버전으로 커밋하고 확정 — 재검토 기한도 여기서 갱신된다 */
+export function commitPbVersion(pbId: string, note: string, author = "법무실 정연우") {
+  patchPb(pbId, (p) => {
+    const last = p.versions[p.versions.length - 1];
+    const when = today();
+    return {
+      ...p,
+      versions: [
+        ...p.versions,
+        { v: bumpVersion(last?.v ?? "v1.0"), when, author, note, status: "confirmed" as PbStatus, changes: p.pending },
+      ],
+      pending: [],
+      status: "confirmed",
+      lastReviewedAt: when,
+      requests: p.requests.map((r) => ({ ...r, resolved: true })),
+    };
+  });
+}
+
+/** 내용 변경 없이 "지금도 유효하다"고 재확인 — 기한만 연장 */
+export function revalidatePlaybook(pbId: string, author = "법무실 정연우") {
+  patchPb(pbId, (p) => {
+    const last = p.versions[p.versions.length - 1];
+    const when = today();
+    return {
+      ...p,
+      versions: [
+        ...p.versions,
+        {
+          v: bumpVersion(last?.v ?? "v1.0"),
+          when,
+          author,
+          note: "정기 재검토 — 내용 변경 없이 유효성 재확인",
+          status: "confirmed" as PbStatus,
+          changes: [],
+        },
+      ],
+      status: "confirmed",
+      lastReviewedAt: when,
+    };
+  });
+}
+
+/** 플레이북 항목을 리스크 규칙으로 등록 */
+export function registerPbItemRule(pbId: string, itemId: string) {
+  const pb = getSnapshot().playbooks.find((p) => p.id === pbId);
+  const item = pb?.items.find((i) => i.id === itemId);
+  if (!pb || !item || item.deviation.length === 0) return null;
+
+  const res = addRule({
+    title: `${item.title} — 플레이북 기준 이탈`,
+    desc: `${pb.title} ${item.no}: ${item.standard}`,
+    level: item.level,
+    keywords: ruleKeywordsFor(item),
+    mode: "all",
+    source: "playbook",
+    sourceRef: `${pb.id} · ${item.no}`,
+    applied: true,
+  });
+  if (!res.created && !res.rule.applied) setApplied(res.rule.id, true);
+  update((s) => ({ ...s, pbRules: { ...s.pbRules, [itemId]: res.rule.id } }));
+  return res;
+}
+
 /** 시드 상태로 되돌리기 (데모 초기화용) */
 export function resetStore() {
   if (typeof window !== "undefined") {
@@ -193,6 +339,8 @@ export function useStore() {
     rules: s.rules,
     statuses: s.statuses,
     flaggedChanges: s.flaggedChanges,
+    playbooks: s.playbooks,
+    pbRules: s.pbRules,
     addRule,
     updateRule,
     removeRule,
@@ -202,5 +350,13 @@ export function useStore() {
     flagChange,
     unflagChange,
     resetStore,
+    updatePbItem,
+    acceptPbSuggestion,
+    dismissPbSuggestion,
+    setPbStatus,
+    resolvePbRequest,
+    commitPbVersion,
+    revalidatePlaybook,
+    registerPbItemRule,
   };
 }

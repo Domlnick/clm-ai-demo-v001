@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   Settings,
   Compass,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,6 +44,7 @@ export const NAV: NavGroup[] = [
     group: "계약 자산",
     items: [
       { id: "ledger", label: "계약 대장", icon: BookText, href: "/contracts" },
+      { id: "playbook", label: "협상 플레이북", icon: Handshake, href: "/playbook", warn: true },
       { id: "renewal", label: "만료·갱신 관리", icon: BellRing, badge: "3", warn: true },
       { id: "risk", label: "리스크 관리", icon: ShieldAlert, href: "/risk" },
       { id: "similar", label: "유사 계약 탐색", icon: Compass },

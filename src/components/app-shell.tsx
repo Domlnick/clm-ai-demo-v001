@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { BrandLockup } from "@/components/brand";
 import { NAV, type NavItem } from "@/lib/nav";
+import { openRequests, reviewState } from "@/lib/playbooks";
+import { useStore } from "@/lib/store";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +27,7 @@ const PAGE_META: Record<string, { title: string; crumb: string }> = {
   "/draft": { title: "초안 작성 어시스트", crumb: "계약 AI" },
   "/contracts": { title: "계약 대장", crumb: "계약 자산" },
   "/risk": { title: "리스크 관리", crumb: "계약 자산" },
+  "/playbook": { title: "협상 플레이북", crumb: "계약 자산" },
 };
 
 function activeIdFor(pathname: string): string {
@@ -33,6 +36,7 @@ function activeIdFor(pathname: string): string {
   if (pathname.startsWith("/search")) return "search";
   if (pathname.startsWith("/draft")) return "draft";
   if (pathname.startsWith("/contracts")) return "ledger";
+  if (pathname.startsWith("/playbook")) return "playbook";
   if (pathname.startsWith("/risk")) return "risk";
   return "";
 }
@@ -40,11 +44,18 @@ function activeIdFor(pathname: string): string {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeId = activeIdFor(pathname);
+  const { playbooks } = useStore();
+  /* 사이드바 뱃지 — 미해결 수정요청 + 재검토 기한이 지난 플레이북 */
+  const pbBadge =
+    playbooks.reduce((n, pb) => n + openRequests(pb).length, 0) +
+    playbooks.filter((pb) => reviewState(pb) === "overdue").length;
   const meta =
     PAGE_META[pathname] ??
     (pathname.startsWith("/contracts/")
       ? { title: "계약 상세", crumb: "계약 자산" }
-      : { title: "GS칼텍스 법무 AI", crumb: "워크스페이스" });
+      : pathname.startsWith("/playbook/")
+        ? { title: "플레이북 상세", crumb: "계약 자산" }
+        : { title: "GS칼텍스 법무 AI", crumb: "워크스페이스" });
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -143,7 +154,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
                 {collapsed && <div className="mt-1.5" />}
                 {g.items.map((it) => (
-                  <NavLink key={it.id} item={it} active={it.id === activeId} collapsed={collapsed} />
+                  <NavLink
+                    key={it.id}
+                    item={it.id === "playbook" ? { ...it, badge: pbBadge > 0 ? String(pbBadge) : undefined } : it}
+                    active={it.id === activeId}
+                    collapsed={collapsed}
+                  />
                 ))}
               </div>
             ))}

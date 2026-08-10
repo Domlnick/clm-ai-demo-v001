@@ -6,13 +6,14 @@ import { CONTRACTS, type Contract, type ContractClause } from "./contracts";
 
 export type RiskLevel = "crit" | "warn";
 export type MatchMode = "all" | "any";
-export type RuleSource = "seed" | "manual" | "analysis" | "version";
+export type RuleSource = "seed" | "manual" | "analysis" | "version" | "playbook";
 
-export const SOURCE_META: Record<RuleSource, { label: string; tone: "gray" | "accent" | "info" | "violet" }> = {
+export const SOURCE_META: Record<RuleSource, { label: string; tone: "gray" | "accent" | "info" | "violet" | "ok" }> = {
   seed: { label: "사내 표준", tone: "gray" },
   manual: { label: "직접 등록", tone: "accent" },
   analysis: { label: "분석 자동등록", tone: "info" },
   version: { label: "버전 변경", tone: "violet" },
+  playbook: { label: "플레이북", tone: "ok" },
 };
 
 export const LEVEL_META: Record<RiskLevel, { label: string; tone: "crit" | "warn" }> = {
@@ -120,9 +121,11 @@ const norm = (s: string) => s.replace(/\s/g, "").toLowerCase();
 
 export type ClauseHit = { clause: ContractClause; matched: string[] };
 export type ContractHit = { contract: Contract; clauses: ClauseHit[] };
+/** 매칭에 실제로 필요한 것은 키워드와 모드뿐 — 플레이북 항목도 그대로 통과시킨다 */
+export type KeywordProbe = Pick<RiskRule, "keywords" | "mode">;
 
 /** 한 계약 안에서 규칙에 걸리는 조항들 */
-export function matchClauses(rule: RiskRule, c: Contract): ClauseHit[] {
+export function matchClauses(rule: KeywordProbe, c: Contract): ClauseHit[] {
   if (rule.keywords.length === 0) return [];
   const hits: ClauseHit[] = [];
   for (const clause of c.clauses) {
@@ -135,7 +138,7 @@ export function matchClauses(rule: RiskRule, c: Contract): ClauseHit[] {
 }
 
 /** 코퍼스 전체 검색 — 예외 계약도 포함해서 돌려준다 */
-export function searchRule(rule: RiskRule, corpus: Contract[] = CONTRACTS): ContractHit[] {
+export function searchRule(rule: KeywordProbe, corpus: Contract[] = CONTRACTS): ContractHit[] {
   return corpus
     .map((contract) => ({ contract, clauses: matchClauses(rule, contract) }))
     .filter((h) => h.clauses.length > 0);
