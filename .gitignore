@@ -52,3 +52,16 @@ next-env.d.ts
 
 # 화면 캡처 산출물
 /output/
+
+# 로컬 참고 자료 (Git 제외 — 이전 상위 폴더 설정 유지)
+/CLM 자강두천 정리.md
+/GS칼텍스_법무계약서AI_POC_기획서.html
+/개념정리/
+
+# 이전 MVP 문서·git 이력 백업
+/docs/
+/.git-legacy-mvp/
+/.gitignore-legacy-mvp
+
+# 세션 잔여 폴더
+/99.git/
