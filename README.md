@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GS칼텍스 법무 계약서 AI — PoC 프로토타입
 
-## Getting Started
+법무팀이 수십만 건의 계약서를 AI로 **분류·요약·검색**하고, 협상 플레이북 기준과 대조해 **리스크를 관리**하는 업무 흐름을 화면으로 보여주는 시연용 프로토타입입니다.
 
-First, run the development server:
+기술 검증(PoC)이 아니라, 앞으로 구축할 사용자 경험과 기대 효과를 짧은 발표에서 구체적으로 합의하는 것이 목표입니다. 실제 파일 업로드, OCR 엔진, LLM 호출, 사내 인증, 데이터 저장은 포함하지 않으며 화면에 나오는 계약·회사·금액은 모두 시연용 가상 정보입니다.
+
+## 실행
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`http://localhost:3000` 을 브라우저에서 엽니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build     # 타입 검사 + 운영 빌드
+npm run lint      # ESLint
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Node.js 20 이상 (개발·검증은 24.x 에서 진행)
+- 상태는 브라우저 `localStorage` 에만 저장되므로 서버·DB 준비가 필요하지 않습니다
 
-## Learn More
+## 화면 구성
 
-To learn more about Next.js, take a look at the following resources:
+| 경로 | 화면 | 내용 |
+|---|---|---|
+| `/` | 대시보드 | KPI, AI 처리 파이프라인, 최근 계약, 만료 임박, 유형 분포 |
+| `/analyze` | 계약서 분석·요약 | 샘플 계약서 첨부 → 4단계 분석 → 분류·플레이북 대조·핵심 요약·선례 Q&A |
+| `/search` | 계약서 검색 | 자연어 질의, 조항 단위 검색 결과와 근거 인용 |
+| `/draft` | 초안 작성 어시스트 | 대화로 브리프를 정리한 뒤 조항별 문안 제안 |
+| `/contracts` | 계약 대장 | 계약 목록·필터, 상세에서 버전 이력·조항·리스크 확인 |
+| `/playbook` | 협상 플레이북 | 부서별 기준, AI 반영안 채택, 확정·정기 재검토 |
+| `/risk` | 리스크 관리 | "이런 내용은 리스크다"를 정의해 전체 계약에 적용 |
+| `/login` | 로그인 | 사번·사내 메일 + 데모 계정 선택 |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+사이드바의 `내 검토함`, `만료·갱신 관리`, `유사 계약 탐색`, `설정` 은 프로토타입 범위 밖이며 안내 토스트만 표시합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 시연 시나리오 (3~5분)
 
-## Deploy on Vercel
+1. **대시보드** 에서 법무팀의 반복 업무와 처리 파이프라인을 설명합니다.
+2. **계약서 분석·요약** 에서 `파일 선택` 을 눌러 샘플 계약서를 첨부하고 `AI 분석 시작` 을 누릅니다. OCR 판독 → 계약 유형 분류 → 플레이북 기준 대조 → 핵심 내용 요약이 4.8초에 걸쳐 진행됩니다.
+3. 결과 화면에서 분류 신뢰도 96%, **플레이북 대비 차이 2건**, 한줄·핵심·조항별 3층 요약과 추출된 대장 필드 9개를 확인합니다.
+4. 탐지된 리스크를 **리스크 규칙으로 등록** 하고 `/risk` → `/contracts` 로 이동해 같은 조항을 가진 다른 계약에도 적용되는 것을 보여줍니다.
+5. 헤더 우측 계정 메뉴에서 **역할을 전환** 해 권한에 따라 수정·확정·확정 취소가 어떻게 달라지는지 설명합니다.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 역할별 권한
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+로그인한 계정의 역할이 화면의 수정·확정 권한을 결정합니다. 정책은 `src/lib/permissions.ts` 한 곳에 있습니다.
+
+| 역할 | 권한 |
+|---|---|
+| 현업 담당자 `business` | 분석 요청과 결과 조회, 법무 확정 후 결과 활용(리포트·OCR 텍스트 내보내기) |
+| 법무 담당자 `legalReviewer` | AI 결과 검토·수정·확정, 리스크 규칙 등록, 플레이북 반영 |
+| 법무 관리자 `legalAdmin` | 전체 처리 + 확정 취소(체결본 상태 변경, 규칙 적용 해제·삭제, 확정 플레이북 재검토) |
+
+권한이 없는 동작은 버튼이 흐리게 표시되고, 눌렀을 때 사유를 토스트로 알립니다.
+
+### 데모 계정
+
+비밀번호는 검증하지 않습니다(입력 여부만 확인). 로그인 화면의 `채우기` 를 누르면 사번이 채워집니다.
+
+| 이름 | 사번 | 소속 | 역할 |
+|---|---|---|---|
+| 홍길동 (기본 로그인) | 20180417 | 법무실 계약심사팀 | 법무 담당자 |
+| 김서연 | 20150902 | 법무실 계약심사팀 | 법무 관리자 |
+| 박준호 | 20210311 | 법무실 계약관리팀 | 법무 담당자 |
+| 이지훈 | 20190625 | 구매실 구매기획팀 | 현업 담당자 |
+
+헤더 이름을 누르면 계정 전환과 로그아웃을 할 수 있습니다. 역할 선택기는 발표용 장치이며, 서버 측 권한 검증을 수행하지 않으므로 보안 기능으로 사용할 수 없습니다.
+
+## 기술 구성
+
+- **Next.js 16.3** App Router · **React 19** · **TypeScript**
+- **Tailwind CSS 4** — 디자인 토큰은 `src/app/globals.css`
+- **radix-ui** 프리미티브 + `src/components/ui/*` · 아이콘 `lucide-react`
+- 상태는 모듈 레벨 스토어 + `useSyncExternalStore` 로 구현해 `localStorage` 에 유지하면서도 하이드레이션 불일치가 생기지 않습니다
+
+## 주요 파일과 PoC 전환 지점
+
+| 파일 | 역할 |
+|---|---|
+| `src/lib/data.ts` | 분석 결과·처리 단계·검색·초안 등 화면 시나리오 데이터. 실제 OCR/LLM 응답을 같은 구조로 연결할 첫 교체 지점입니다 |
+| `src/lib/contracts.ts` | 계약 대장 코퍼스(버전 이력·조항 원문) |
+| `src/lib/playbooks.ts` | 협상 플레이북 기준·AI 반영안·재검토 주기 |
+| `src/lib/risk.ts` | 리스크 규칙 정의와 키워드 매칭 검색 |
+| `src/lib/store.tsx` | 화면 간 공유 상태 (`localStorage` 키 `legalai_state_v2`) |
+| `src/lib/auth.tsx` | 로그인 세션과 데모 계정 (`legalai_auth_v1`) |
+| `src/lib/permissions.ts` | 역할·문서 상태별 처리 권한 정책 |
+| `src/components/app-shell.tsx` | 헤더·사이드바·토스트를 포함한 공통 셸 |
+
+처리 단계와 소요 시간은 `src/lib/data.ts` 의 `PIPELINE` 에서 `ms` 값으로 조정합니다(현재 합계 4,800ms).
+
+데모 상태를 처음으로 되돌리려면 `/risk` 화면의 `데모 초기화`(법무 관리자 권한) 를 누르거나 브라우저의 `localStorage` 를 지웁니다.
