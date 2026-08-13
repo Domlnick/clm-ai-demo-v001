@@ -62,13 +62,44 @@ export const EXPIRING = [
 ];
 
 /* ---------- 파이프라인 스테이지 ---------- */
+/* 처리 단계 — 상위 폴더 MVP(clm-ai-demo-mvp)의 ProcessingStage 구성을 따랐습니다.
+   단계마다 무엇을 하는지 한 줄로 설명하고, 초기화면 3축(분류 · 플레이북 매칭 · 요약)이
+   각각 별도 단계로 드러나게 배치했습니다.
+
+   ms = 그 단계가 화면에 머무는 시간. 합계 4,800ms 로 상위 폴더와 같습니다. */
 export const PIPELINE = [
-  { key: "OCR", label: "텍스트화", detail: "한국어 OCR · HWP 파싱", done: true },
-  { key: "SEG", label: "구조 분절", detail: "조·항·호 인식", done: true },
-  { key: "CLS", label: "유형 분류", detail: "11개 유형 · 92.4%", done: true },
-  { key: "EXT", label: "필드 추출", detail: "당사자·기간·금액·조항", done: true },
-  { key: "SUM", label: "3층 요약", detail: "한줄·핵심·조항별", done: true },
+  {
+    key: "OCR",
+    label: "OCR 텍스트 판독",
+    detail: "스캔 이미지에서 계약 문장을 인식합니다",
+    meta: "한국어 OCR · 조·항·호 구조 분절",
+    ms: 1300,
+  },
+  {
+    key: "CLS",
+    label: "계약 유형 분류",
+    detail: "업무와 계약 특성을 기준으로 유형을 판정합니다",
+    meta: "11개 유형 · 92.4% · 세그먼트 S1~S3",
+    ms: 1100,
+  },
+  {
+    key: "PBK",
+    label: "플레이북 기준 대조",
+    detail: "확정된 협상 플레이북 항목과 조항을 비교합니다",
+    meta: "기준 이탈 · 준수 판정",
+    ms: 1100,
+  },
+  {
+    key: "SUM",
+    label: "핵심 내용 요약",
+    detail: "기간·금액·의무와 주요 조건을 정리합니다",
+    meta: "3층 요약 · 대장 필드 추출",
+    ms: 1300,
+  },
 ];
+
+/** 처리 단계 총 소요(ms) */
+export const PIPELINE_TOTAL_MS = PIPELINE.reduce((n, p) => n + p.ms, 0);
 
 /* ============================================================
    분석 결과 (파일 업로드 데모용)
@@ -622,7 +653,7 @@ export const SEARCH_QA_SUGGESTIONS = [
 export const LEDGER_TARGET = {
   newId: "C-24818",
   path: "계약DB / 구매 / 원자재 / 2026",
-  owner: "정연우 변호사 · 계약심사팀",
+  owner: "홍길동 변호사 · 계약심사팀",
   requester: "구매팀 김현수",
   retention: "계약 종료 후 10년 보존",
   access: "법무실 · 구매팀 · 여수공장 설비운영팀",

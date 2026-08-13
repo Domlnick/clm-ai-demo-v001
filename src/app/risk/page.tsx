@@ -13,11 +13,16 @@ import {
   type RiskRule, type RiskLevel, type MatchMode,
 } from "@/lib/risk";
 import { useStore } from "@/lib/store";
+import { usePermissions } from "@/lib/permissions";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
 export default function RiskPage() {
   const { rules, addRule, setApplied, toggleException, removeRule, resetStore } = useStore();
+  /* 권한 — 규칙 등록·적용은 법무 담당자 이상, 해제·삭제·초기화는 법무 관리자만 */
+  const { allow, guard, reason } = usePermissions();
+  const canEdit = allow("editSummary");
+  const canReopen = allow("reopenResult", "confirmed");
   const [composing, setComposing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "applied" | "draft">("all");
@@ -58,17 +63,31 @@ export default function RiskPage() {
         </div>
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => { resetStore(); setComposing(false); setOpenId(null); toast("리스크 규칙을 초기 상태로 되돌렸습니다"); }}
-            className="flex h-[40px] items-center gap-2 rounded-[10px] border border-line bg-surface px-3.5 text-[13px] font-semibold text-t2 transition hover:bg-surface-2"
-            title="등록한 규칙·예외·상태를 모두 초기화합니다"
+            onClick={() => {
+              if (!guard("reopenResult", "confirmed")) return;
+              resetStore(); setComposing(false); setOpenId(null);
+              toast("리스크 규칙을 초기 상태로 되돌렸습니다");
+            }}
+            aria-disabled={!canReopen}
+            className={cn(
+              "flex h-[40px] items-center gap-2 rounded-[10px] border border-line bg-surface px-3.5 text-[13px] font-semibold text-t2 transition hover:bg-surface-2",
+              !canReopen && "cursor-not-allowed opacity-50",
+            )}
+            title={reason("reopenResult", "confirmed") ?? "등록한 규칙·예외·상태를 모두 초기화합니다"}
           >
             <RotateCcw size={15} /> 데모 초기화
           </button>
           <button
-            onClick={() => setComposing((c) => !c)}
+            onClick={() => {
+              if (!composing && !guard("editSummary")) return;
+              setComposing((c) => !c);
+            }}
+            aria-disabled={!canEdit}
+            title={reason("editSummary") ?? undefined}
             className={cn(
               "flex h-[40px] items-center gap-2 rounded-[10px] px-4 text-[13.5px] font-bold transition",
               composing ? "border border-line bg-surface text-t2 hover:bg-surface-2" : "bg-[var(--accent)] text-white shadow-[0_4px_12px_-3px_rgba(15,110,130,.5)] hover:bg-[var(--accent-600)]",
+              !canEdit && !composing && "cursor-not-allowed opacity-50",
             )}
           >
             {composing ? <><X size={16} /> 닫기</> : <><Plus size={16} /> 리스크 규칙 만들기</>}
@@ -100,6 +119,7 @@ export default function RiskPage() {
         <RuleComposer
           onCancel={() => setComposing(false)}
           onCreate={(r) => {
+            if (!guard("editSummary")) return;
             const { rule, created } = addRule(r);
             setComposing(false);
             setOpenId(rule.id);
@@ -145,11 +165,20 @@ export default function RiskPage() {
             open={openId === rule.id}
             onToggleOpen={() => setOpenId(openId === rule.id ? null : rule.id)}
             onApply={(v) => {
+              /* 적용은 법무 담당자 이상, 이미 적용된 규칙의 해제는 확정 취소로 봅니다 */
+              if (v ? !guard("confirmResult") : !guard("reopenResult", "confirmed")) return;
               setApplied(rule.id, v);
               toast(v ? `『${rule.title}』을(를) 전체 계약에 적용했습니다` : "적용을 해제했습니다");
             }}
-            onException={(cid) => toggleException(rule.id, cid)}
-            onRemove={() => { removeRule(rule.id); toast("규칙을 삭제했습니다"); }}
+            onException={(cid) => {
+              if (!guard("editSummary")) return;
+              toggleException(rule.id, cid);
+            }}
+            onRemove={() => {
+              if (!guard("reopenResult", "confirmed")) return;
+              removeRule(rule.id);
+              toast("규칙을 삭제했습니다");
+            }}
           />
         ))}
       </div>

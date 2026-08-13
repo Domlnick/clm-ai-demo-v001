@@ -20,6 +20,7 @@ import {
 import { PLAYBOOK_QA, PLAYBOOK_QA_SUGGESTIONS } from "@/lib/data";
 import { searchRule, LEVEL_META } from "@/lib/risk";
 import { useStore } from "@/lib/store";
+import { playbookReviewStatus, usePermissions } from "@/lib/permissions";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,8 @@ export default function PlaybookDetailPage() {
 
   const pb = playbooks.find((p) => p.id === params.id);
   const [tab, setTab] = useState<"items" | "suggest" | "history">("items");
+  /* 권한 — 검토·확정은 법무 담당자 이상, 확정된 플레이북 되돌리기는 법무 관리자만 */
+  const { allow, guard, reason } = usePermissions();
   const [openItem, setOpenItem] = useState<string | null>(null);
 
   if (!pb) {
@@ -54,13 +57,19 @@ export default function PlaybookDetailPage() {
   /* 수정요청은 검토 단계로 돌아간 것으로 본다 */
   const stepActive = pb.status === "change_requested" ? "review" : pb.status;
   const latest = pb.versions[pb.versions.length - 1];
+  const pbReview = playbookReviewStatus(pb.status);
+  /* 확정된 플레이북의 상태를 바꾸는 건 확정 취소로 취급합니다 */
+  const statusAction = pbReview === "confirmed" ? ("reopenResult" as const) : ("confirmResult" as const);
+  const canChangeStatus = allow(statusAction, pbReview);
 
   const accept = (s: PbSuggestion) => {
+    if (!guard("editSummary")) return;
     acceptPbSuggestion(pb.id, s);
     toast("AI 제안을 반영했습니다 — 확정하면 새 버전으로 기록됩니다");
   };
 
   const confirm = () => {
+    if (!guard("confirmResult")) return;
     if (pb.pending.length === 0) {
       revalidatePlaybook(pb.id);
       toast("내용 변경 없이 재확인했습니다 — 재검토 기한이 1년 연장됩니다");
@@ -71,6 +80,7 @@ export default function PlaybookDetailPage() {
   };
 
   const registerRule = (item: PlaybookItem) => {
+    if (!guard("editSummary")) return;
     const res = registerPbItemRule(pb.id, item.id);
     if (!res) {
       toast("이탈 키워드가 없는 항목은 규칙으로 만들 수 없습니다");
@@ -131,13 +141,22 @@ export default function PlaybookDetailPage() {
             </div>
           </div>
           <button
-            onClick={() => { revalidatePlaybook(pb.id); toast("내용 변경 없이 재확인했습니다 — 기한이 1년 연장됩니다"); }}
+            onClick={() => {
+              if (!guard("confirmResult")) return;
+              revalidatePlaybook(pb.id);
+              toast("내용 변경 없이 재확인했습니다 — 기한이 1년 연장됩니다");
+            }}
             className="flex h-[34px] items-center gap-1.5 rounded-[8px] bg-white px-3.5 text-[12.5px] font-bold text-t2 transition hover:brightness-95"
           >
             <Check size={14} /> 변경 없이 재확인
           </button>
           <button
-            onClick={() => { setPbStatus(pb.id, "review"); setTab("items"); toast("재검토를 시작합니다"); }}
+            onClick={() => {
+              /* 확정본을 검토 단계로 되돌리는 동작 */
+              if (!guard(statusAction, pbReview)) return;
+              setPbStatus(pb.id, "review"); setTab("items");
+              toast("재검토를 시작합니다");
+            }}
             className="flex h-[34px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3.5 text-[12.5px] font-bold text-white transition hover:bg-[var(--accent-600)]"
           >
             <RotateCcw size={14} /> 지금 재검토
@@ -161,7 +180,11 @@ export default function PlaybookDetailPage() {
               </div>
             </div>
             <button
-              onClick={() => { setPbStatus(pb.id, "review"); setTab("suggest"); toast("AI가 제안한 반영안을 확인하세요"); }}
+              onClick={() => {
+                if (!guard("editSummary")) return;
+                setPbStatus(pb.id, "review"); setTab("suggest");
+                toast("AI가 제안한 반영안을 확인하세요");
+              }}
               className="flex h-[34px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3.5 text-[12.5px] font-bold text-white transition hover:bg-[var(--accent-600)]"
             >
               <Sparkles size={14} /> AI 반영안 보기
@@ -176,7 +199,11 @@ export default function PlaybookDetailPage() {
                     {item && <Tag className="h-[19px] bg-white text-[10.5px] text-[#93610a]">{item.no} {item.title}</Tag>}
                     <span className="num text-[11px] text-[#93610a]/80">{r.when} · {r.from}</span>
                     <button
-                      onClick={() => { resolvePbRequest(pb.id, r.id); toast("요청을 처리 완료로 표시했습니다"); }}
+                      onClick={() => {
+                        if (!guard("editSummary")) return;
+                        resolvePbRequest(pb.id, r.id);
+                        toast("요청을 처리 완료로 표시했습니다");
+                      }}
                       className="ml-auto flex h-[26px] items-center gap-1 rounded-[7px] border border-[var(--amber-line)] bg-white px-2.5 text-[11.5px] font-bold text-[#93610a] transition hover:brightness-95"
                     >
                       <Check size={12} /> 처리 완료
@@ -200,10 +227,18 @@ export default function PlaybookDetailPage() {
           {PB_STATUS_ORDER.map((s, i) => (
             <span key={s} className="flex items-center gap-1.5">
               <button
-                onClick={() => { setPbStatus(pb.id, s); toast(`상태를 『${PB_STATUS_META[s].label}』(으)로 변경했습니다`); }}
+                onClick={() => {
+                  if (stepActive === s) return;
+                  if (!guard(statusAction, pbReview)) return;
+                  setPbStatus(pb.id, s);
+                  toast(`상태를 『${PB_STATUS_META[s].label}』(으)로 변경했습니다`);
+                }}
+                aria-disabled={!canChangeStatus && stepActive !== s}
+                title={stepActive === s ? undefined : reason(statusAction, pbReview) ?? undefined}
                 className={cn(
                   "flex h-[32px] items-center gap-1.5 rounded-[8px] border px-3 text-[12.5px] font-bold transition",
                   stepActive === s ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-line bg-surface text-t3 hover:border-line-strong hover:text-t1",
+                  !canChangeStatus && stepActive !== s && "cursor-not-allowed opacity-45",
                 )}
               >
                 {stepActive === s && <Check size={13} />}
@@ -444,7 +479,7 @@ export default function PlaybookDetailPage() {
 
                         <div className="flex items-center gap-2 border-t border-line-soft bg-surface-2 px-4 py-3">
                           <span className="min-w-0 flex-1 text-[11px] text-t4">채택하면 기준 문구가 교체되고 확정 시 새 버전에 기록됩니다</span>
-                          <button onClick={() => { dismissPbSuggestion(pb.id, s.id); toast("제안을 무시했습니다"); }} className="h-[32px] rounded-[8px] border border-line bg-surface px-3 text-[12.5px] font-semibold text-t2 transition hover:bg-surface-3">
+                          <button onClick={() => { if (!guard("editSummary")) return; dismissPbSuggestion(pb.id, s.id); toast("제안을 무시했습니다"); }} className="h-[32px] rounded-[8px] border border-line bg-surface px-3 text-[12.5px] font-semibold text-t2 transition hover:bg-surface-3">
                             무시
                           </button>
                           <button onClick={() => accept(s)} className="flex h-[32px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3.5 text-[12.5px] font-bold text-white transition hover:bg-[var(--accent-600)]">
@@ -540,7 +575,11 @@ export default function PlaybookDetailPage() {
                   <Row k="다음 기한" v={nextDate} />
                 </div>
                 <button
-                  onClick={() => { revalidatePlaybook(pb.id); toast("재확인 완료 — 기한이 1년 연장됐습니다"); }}
+                  onClick={() => {
+                    if (!guard("confirmResult")) return;
+                    revalidatePlaybook(pb.id);
+                    toast("재확인 완료 — 기한이 1년 연장됐습니다");
+                  }}
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-[9px] border border-line py-2.5 text-[12.5px] font-semibold text-t2 transition hover:bg-surface-2"
                 >
                   <Check size={14} /> 변경 없이 재확인

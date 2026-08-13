@@ -255,7 +255,7 @@ export function resolvePbRequest(pbId: string, reqId: string) {
 }
 
 /** 대기 중 변경을 새 버전으로 커밋하고 확정 — 재검토 기한도 여기서 갱신된다 */
-export function commitPbVersion(pbId: string, note: string, author = "법무실 정연우") {
+export function commitPbVersion(pbId: string, note: string, author = "법무실 홍길동") {
   patchPb(pbId, (p) => {
     const last = p.versions[p.versions.length - 1];
     const when = today();
@@ -274,7 +274,7 @@ export function commitPbVersion(pbId: string, note: string, author = "법무실 
 }
 
 /** 내용 변경 없이 "지금도 유효하다"고 재확인 — 기한만 연장 */
-export function revalidatePlaybook(pbId: string, author = "법무실 정연우") {
+export function revalidatePlaybook(pbId: string, author = "법무실 홍길동") {
   patchPb(pbId, (p) => {
     const last = p.versions[p.versions.length - 1];
     const when = today();

@@ -11,6 +11,7 @@ import {
   DRAFT_SLOTS, DRAFT_BRIEF_BASE, DRAFT_INTAKE_STEPS, DRAFT_MUSTS, DRAFT_REFS,
   type DraftSuggestion, type DraftBrief, type IntakeOption,
 } from "@/lib/data";
+import { useAuth } from "@/lib/auth";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ function guessType(text: string): IntakeOption {
 }
 
 export default function DraftPage() {
+  const { user } = useAuth();
   const [stage, setStage] = useState<Stage>("intake");
 
   /* ---------- 인테이크 상태 ---------- */
@@ -195,7 +197,8 @@ export default function DraftPage() {
               <div className="flex flex-col gap-4">
                 {/* 인사 */}
                 <Bubble>
-                  안녕하세요, 정연우 변호사님. <b className="font-bold text-[#0a4e5d]">어떤 계약서를 작성하시나요?</b>
+                  안녕하세요{user ? `, ${user.name} ${user.title}님` : ""}.{" "}
+                  <b className="font-bold text-[#0a4e5d]">어떤 계약서를 작성하시나요?</b>
                   <br />
                   유형을 고르셔도 되고, 상황을 문장으로 적어주셔도 제가 유형을 판별해 정리하겠습니다.
                 </Bubble>

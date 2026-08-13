@@ -68,7 +68,7 @@ export const CONTRACTS: Contract[] = [
     ],
     versions: [
       { v: "v1.0", when: "2026-06-12", author: "구매팀 김현수", note: "공급자 초안 접수", status: "predraft", changes: [] },
-      { v: "v2.0", when: "2026-07-20", author: "법무실 정연우", note: "1차 법무 검토 반영", status: "review", changes: [
+      { v: "v2.0", when: "2026-07-20", author: "법무실 홍길동", note: "1차 법무 검토 반영", status: "review", changes: [
         { id: "c1", field: "제15조 품질보증", before: "12개월", after: "24개월" },
         { id: "c2", field: "제19조 비밀유지 존속기간", before: "1년", after: "3년" },
       ] },
@@ -92,7 +92,7 @@ export const CONTRACTS: Contract[] = [
     ],
     versions: [
       { v: "v1.0", when: "2026-05-30", author: "설비운영팀", note: "표준 템플릿 기반 작성", status: "predraft", changes: [] },
-      { v: "v1.1", when: "2026-08-05", author: "법무실 정연우", note: "체결본", status: "signed", changes: [
+      { v: "v1.1", when: "2026-08-05", author: "법무실 홍길동", note: "체결본", status: "signed", changes: [
         { id: "c5", field: "제5조 갱신 방식", before: "통지 후 갱신", after: "무통지 자동연장" },
       ] },
     ],
@@ -111,7 +111,7 @@ export const CONTRACTS: Contract[] = [
     ],
     versions: [
       { v: "v1.0", when: "2026-07-01", author: "IT기획팀", note: "신규 체결", status: "predraft", changes: [] },
-      { v: "v1.1", when: "2026-07-30", author: "법무실 정연우", note: "체결본", status: "signed", changes: [] },
+      { v: "v1.1", when: "2026-07-30", author: "법무실 홍길동", note: "체결본", status: "signed", changes: [] },
       { v: "v2.0", when: "2026-08-09", author: "IT기획팀", note: "범위 추가 협의 — 산출물 IP 귀속 변경", status: "amending", changes: [
         { id: "c6", field: "제17조 지식재산권 귀속", before: "발주자 귀속", after: "수급인 귀속" },
       ] },
@@ -145,7 +145,7 @@ export const CONTRACTS: Contract[] = [
     ],
     versions: [
       { v: "v1.0", when: "2025-03-20", author: "정보보안팀", note: "체결본", status: "signed", changes: [] },
-      { v: "v1.1", when: "2026-08-01", author: "법무실 정연우", note: "SLA 조건 재협의 착수", status: "amending", changes: [
+      { v: "v1.1", when: "2026-08-01", author: "법무실 홍길동", note: "SLA 조건 재협의 착수", status: "amending", changes: [
         { id: "c7", field: "제10조 SLA 감액률", before: "20%", after: "10%" },
       ] },
     ],
@@ -211,7 +211,7 @@ export const CONTRACTS: Contract[] = [
     ],
     versions: [
       { v: "v1.0", when: "2024-09-01", author: "물류팀", note: "체결본", status: "signed", changes: [] },
-      { v: "v1.1", when: "2026-08-05", author: "법무실 정연우", note: "갱신 통지기한 임박 — 조건 재검토", status: "amending", changes: [] },
+      { v: "v1.1", when: "2026-08-05", author: "법무실 홍길동", note: "갱신 통지기한 임박 — 조건 재검토", status: "amending", changes: [] },
     ],
   },
   {
@@ -227,7 +227,7 @@ export const CONTRACTS: Contract[] = [
     ],
     versions: [
       { v: "v1.0", when: "2026-04-02", author: "설비기술팀", note: "입찰 제안본", status: "predraft", changes: [] },
-      { v: "v2.0", when: "2026-06-15", author: "법무실 정연우", note: "체결본", status: "signed", changes: [
+      { v: "v2.0", when: "2026-06-15", author: "법무실 홍길동", note: "체결본", status: "signed", changes: [
         { id: "c10", field: "제16조 손해배상 한도", before: "계약금액의 50%", after: "계약금액의 100%" },
       ] },
     ],

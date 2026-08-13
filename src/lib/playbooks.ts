@@ -263,7 +263,7 @@ export const PLAYBOOKS: Playbook[] = [
     dept: "구매팀",
     title: "원자재 구매 협상 플레이북",
     scope: ["일반 구매"],
-    owner: "정연우 변호사",
+    owner: "홍길동 변호사",
     status: "confirmed",
     pending: [],
     dismissed: [],
@@ -315,11 +315,11 @@ export const PLAYBOOKS: Playbook[] = [
     ],
     versions: [
       { v: "v1.0", when: "2025-03-04", author: "구매팀 김현수", note: "구매팀 초안 제출", status: "submitted", changes: [] },
-      { v: "v2.0", when: "2025-06-15", author: "법무실 정연우", note: "법무 검토 반영 — 손배·지연배상 상한 명문화", status: "review", changes: [
+      { v: "v2.0", when: "2025-06-15", author: "법무실 홍길동", note: "법무 검토 반영 — 손배·지연배상 상한 명문화", status: "review", changes: [
         { id: "pc1", field: "1항 손해배상 한도", before: "계약금액의 50%", after: "계약금액의 30%" },
         { id: "pc2", field: "2항 지연배상 총액 상한", before: "미규정", after: "계약금액의 10%" },
       ] },
-      { v: "v2.1", when: "2025-09-15", author: "법무실 정연우", note: "확정본 — 불가항력·IP 귀속 항목 추가", status: "confirmed", changes: [
+      { v: "v2.1", when: "2025-09-15", author: "법무실 홍길동", note: "확정본 — 불가항력·IP 귀속 항목 추가", status: "confirmed", changes: [
         { id: "pc3", field: "6항 불가항력 범위", before: "미규정", after: "감염병·경제제재 포함" },
         { id: "pc4", field: "7항 지식재산권 귀속", before: "미규정", after: "발주자 귀속" },
       ] },
@@ -333,7 +333,7 @@ export const PLAYBOOKS: Playbook[] = [
     dept: "영업기획팀",
     title: "주유소 임대차 협상 플레이북",
     scope: ["주유소 임대차", "임대차"],
-    owner: "정연우 변호사",
+    owner: "홍길동 변호사",
     status: "change_requested",
     pending: [],
     dismissed: [],
@@ -373,11 +373,11 @@ export const PLAYBOOKS: Playbook[] = [
     ],
     versions: [
       { v: "v1.0", when: "2025-02-18", author: "영업기획팀 박지훈", note: "영업기획팀 초안 제출", status: "submitted", changes: [] },
-      { v: "v1.1", when: "2025-04-30", author: "법무실 정연우", note: "법무 검토 반영 — 손배 한도·통지기한 명문화", status: "review", changes: [
+      { v: "v1.1", when: "2025-04-30", author: "법무실 홍길동", note: "법무 검토 반영 — 손배 한도·통지기한 명문화", status: "review", changes: [
         { id: "ps1", field: "1항 갱신 통지기한", before: "만료 30일 전 통지", after: "만료 90일 전 통지 · 무통지 자동연장 배제" },
         { id: "ps2", field: "2항 손해배상 한도", before: "미규정", after: "연 임대료의 30%" },
       ] },
-      { v: "v1.2", when: "2025-06-20", author: "법무실 정연우", note: "확정본", status: "confirmed", changes: [
+      { v: "v1.2", when: "2025-06-20", author: "법무실 홍길동", note: "확정본", status: "confirmed", changes: [
         { id: "ps3", field: "3항 원상회복 비용 분담", before: "미규정", after: "통상 마모분 제외" },
       ] },
     ],
@@ -399,7 +399,7 @@ export const PLAYBOOKS: Playbook[] = [
     dept: "설비운영팀",
     title: "용역·유지보수 협상 플레이북",
     scope: ["용역", "유지보수"],
-    owner: "정연우 변호사",
+    owner: "홍길동 변호사",
     status: "review",
     pending: [],
     dismissed: [],
@@ -438,7 +438,7 @@ export const PLAYBOOKS: Playbook[] = [
     ],
     versions: [
       { v: "v0.9", when: "2026-07-22", author: "설비운영팀 이승우", note: "설비운영팀 초안 제출", status: "submitted", changes: [] },
-      { v: "v1.0", when: "2026-08-05", author: "법무실 정연우", note: "법무 1차 검토 착수 — 책임 한도 예외 항목 신설", status: "review", changes: [
+      { v: "v1.0", when: "2026-08-05", author: "법무실 홍길동", note: "법무 1차 검토 착수 — 책임 한도 예외 항목 신설", status: "review", changes: [
         { id: "pf1", field: "3항 책임 한도의 예외", before: "미규정", after: "비밀정보 예외 금지" },
       ] },
     ],

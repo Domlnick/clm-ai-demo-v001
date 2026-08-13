@@ -102,7 +102,7 @@ export default function DashboardPage() {
           <SectionCard
             title="AI 처리 파이프라인"
             icon={<Layers size={17} className="text-[var(--accent)]" />}
-            sub="입력 문서가 구조화 데이터로 변환되는 5단계"
+            sub={`입력 문서가 구조화 데이터로 변환되는 ${PIPELINE.length}단계`}
             right={<Pill tone="ok" dot>실시간 가동</Pill>}
           >
             <div className="flex items-center gap-0 overflow-x-auto pb-1">
@@ -114,7 +114,7 @@ export default function DashboardPage() {
                     </span>
                     <div className="text-center">
                       <div className="text-[12.5px] font-bold text-t1">{p.label}</div>
-                      <div className="mt-0.5 whitespace-nowrap text-[11px] text-t4">{p.detail}</div>
+                      <div className="mt-0.5 whitespace-nowrap text-[11px] text-t4">{p.meta}</div>
                     </div>
                   </div>
                   {i < PIPELINE.length - 1 && <ChevronRight size={18} className="mx-1.5 mb-6 flex-shrink-0 text-line-strong" />}

@@ -12,6 +12,7 @@ import { getContract, STATUS_META, STATUS_ORDER, type VersionChange } from "@/li
 import { SEG_LABEL } from "@/lib/data";
 import { rulesForContract, excludedRulesForContract, extractKeywords, LEVEL_META, SOURCE_META, searchRule } from "@/lib/risk";
 import { useStore } from "@/lib/store";
+import { contractReviewStatus, usePermissions } from "@/lib/permissions";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,8 @@ export default function ContractDetailPage() {
   const { rules, statuses, setStatus, toggleException, addRule, setApplied, flaggedChanges, flagChange, unflagChange } = useStore();
 
   const [tab, setTab] = useState<"versions" | "clauses" | "risk">("versions");
+  /* 권한 — 체결본(확정)은 법무 관리자만 되돌릴 수 있습니다 */
+  const { allow, guard, reason } = usePermissions();
 
   if (!contract) {
     return (
@@ -35,12 +38,17 @@ export default function ContractDetailPage() {
   }
 
   const st = statuses[contract.id] ?? contract.status;
+  const review = contractReviewStatus(st);
+  /* 확정(체결본) 상태를 바꾸는 건 확정 취소로 취급합니다 */
+  const statusAction = review === "confirmed" ? ("reopenResult" as const) : ("confirmResult" as const);
+  const canChangeStatus = allow(statusAction, review);
   const risks = rulesForContract(contract.id, rules);
   const ignored = excludedRulesForContract(contract.id, rules);
   const crit = risks.filter((r) => r.rule.level === "crit").length;
 
   /* 버전 변경 항목을 리스크로 등록 */
   const flagAsRisk = (ch: VersionChange) => {
+    if (!guard("editSummary")) return;
     const { keywords } = extractKeywords(`${ch.field} ${ch.after}`);
     if (keywords.length === 0) {
       toast("이 변경에서 탐지할 키워드를 찾지 못했습니다");
@@ -65,6 +73,8 @@ export default function ContractDetailPage() {
   };
 
   const unflag = (ch: VersionChange) => {
+    /* 지정 해제는 확정 취소에 해당 — 법무 관리자만 */
+    if (!guard("reopenResult", "confirmed")) return;
     unflagChange(ch.id);
     toast("리스크 지정을 해제했습니다");
   };
@@ -110,10 +120,18 @@ export default function ContractDetailPage() {
           {STATUS_ORDER.map((s, i) => (
             <span key={s} className="flex items-center gap-1.5">
               <button
-                onClick={() => { setStatus(contract.id, s); toast(`상태를 『${STATUS_META[s].label}』(으)로 변경했습니다`); }}
+                onClick={() => {
+                  if (st === s) return;
+                  if (!guard(statusAction, review)) return;
+                  setStatus(contract.id, s);
+                  toast(`상태를 『${STATUS_META[s].label}』(으)로 변경했습니다`);
+                }}
+                aria-disabled={!canChangeStatus && st !== s}
+                title={st === s ? undefined : reason(statusAction, review) ?? undefined}
                 className={cn(
                   "flex h-[32px] items-center gap-1.5 rounded-[8px] border px-3 text-[12.5px] font-bold transition",
                   st === s ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-line bg-surface text-t3 hover:border-line-strong hover:text-t1",
+                  !canChangeStatus && st !== s && "cursor-not-allowed opacity-45",
                 )}
               >
                 {st === s && <Check size={13} />}
@@ -263,7 +281,11 @@ export default function ContractDetailPage() {
                         <span className="text-[13px] font-bold text-t1">{rule.title}</span>
                         <Pill tone={SOURCE_META[rule.source].tone} className="h-[18px] text-[10px]">{SOURCE_META[rule.source].label}</Pill>
                         <button
-                          onClick={() => { toggleException(rule.id, contract.id); toast("이 계약에서는 해당 리스크를 무시합니다"); }}
+                          onClick={() => {
+                  if (!guard("editSummary")) return;
+                  toggleException(rule.id, contract.id);
+                  toast("이 계약에서는 해당 리스크를 무시합니다");
+                }}
                           className="ml-auto flex h-[27px] items-center gap-1.5 rounded-[8px] border border-line bg-white px-2.5 text-[11.5px] font-bold text-t3 transition hover:border-[var(--amber)] hover:text-[var(--amber)]"
                         >
                           <EyeOff size={12} /> 이 계약은 무시
@@ -286,7 +308,11 @@ export default function ContractDetailPage() {
                         <span className="text-[13px] font-bold text-t2">{rule.title}</span>
                         <Pill tone="gray" className="h-[18px] text-[10px]">무시 중</Pill>
                         <button
-                          onClick={() => { toggleException(rule.id, contract.id); toast("다시 리스크로 집계합니다"); }}
+                          onClick={() => {
+                  if (!guard("editSummary")) return;
+                  toggleException(rule.id, contract.id);
+                  toast("다시 리스크로 집계합니다");
+                }}
                           className="ml-auto flex h-[27px] items-center gap-1.5 rounded-[8px] border border-[var(--accent)] bg-[var(--accent-soft)] px-2.5 text-[11.5px] font-bold text-[var(--accent-text)] transition"
                         >
                           <Eye size={12} /> 다시 포함

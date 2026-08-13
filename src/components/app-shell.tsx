@@ -10,13 +10,16 @@ import {
   Bell,
   Sparkles,
   Command,
-  User,
+  LogIn,
   RefreshCw,
 } from "lucide-react";
 import { BrandLockup } from "@/components/brand";
 import { NAV, type NavItem } from "@/lib/nav";
 import { openRequests, reviewState } from "@/lib/playbooks";
+import { useAuth } from "@/lib/auth";
+import { ROLE_LABEL } from "@/lib/permissions";
 import { useStore } from "@/lib/store";
+import { UserMenu } from "@/components/user-menu";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeId = activeIdFor(pathname);
   const { playbooks } = useStore();
+  const { user } = useAuth();
   /* 사이드바 뱃지 — 미해결 수정요청 + 재검토 기한이 지난 플레이북 */
   const pbBadge =
     playbooks.reduce((n, pb) => n + openRequests(pb).length, 0) +
@@ -69,6 +73,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   };
 
+  /* 로그인 화면은 셸(헤더·사이드바) 없이 단독으로 보여줍니다.
+     훅 순서를 흐트러뜨리지 않도록 모든 훅 호출 뒤에서 분기합니다. */
+  if (pathname === "/login") return <>{children}</>;
+
   return (
     <div className="min-h-screen">
       {/* ===== GLOBAL HEADER ===== */}
@@ -82,13 +90,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="blink-dot h-1.5 w-1.5 rounded-full bg-[var(--green)]" />
             문서 인덱싱 <span className="num font-semibold text-t2">248,391</span>건
           </span>
-          <span className="whitespace-nowrap rounded-md bg-[#101828] px-[9px] py-[3px] text-[12px] font-semibold text-white">
-            법무팀
-          </span>
-          <span className="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-3 px-3 text-[13.5px] font-semibold text-t2">
-            <User size={16} className="text-t3" />
-            정연우
-          </span>
+          {user && (
+            <span
+              title={`${user.dept} · ${user.team}`}
+              className="whitespace-nowrap rounded-md bg-[#101828] px-[9px] py-[3px] text-[12px] font-semibold text-white"
+            >
+              {ROLE_LABEL[user.role]}
+            </span>
+          )}
+          <UserMenu />
         </div>
       </header>
 
@@ -107,12 +117,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             {!collapsed && (
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5 whitespace-nowrap text-[14.5px] font-bold tracking-[-.2px] text-t1">
-                  정연우 <span className="text-[11px] font-medium text-t3">변호사</span>
-                </div>
-                <div className="mt-[3px] inline-block whitespace-nowrap rounded-md bg-[#eef2f3] px-[7px] py-[1px] text-[10.5px] font-medium text-t3">
-                  법무실 · 계약심사팀
-                </div>
+                {user ? (
+                  <>
+                    <div className="flex items-baseline gap-1.5 whitespace-nowrap text-[14.5px] font-bold tracking-[-.2px] text-t1">
+                      {user.name} <span className="text-[11px] font-medium text-t3">{user.title}</span>
+                    </div>
+                    <div className="mt-[3px] inline-block whitespace-nowrap rounded-md bg-[#eef2f3] px-[7px] py-[1px] text-[10.5px] font-medium text-t3">
+                      {user.dept} · {user.team}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="whitespace-nowrap text-[14.5px] font-bold tracking-[-.2px] text-t3">
+                      로그인 필요
+                    </div>
+                    <Link
+                      href="/login"
+                      className="mt-[3px] inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-[var(--accent-soft)] px-[7px] py-[1px] text-[10.5px] font-semibold text-[var(--accent-text)] transition hover:bg-[var(--accent-soft-2)]"
+                    >
+                      <LogIn size={11} />
+                      로그인하기
+                    </Link>
+                  </>
+                )}
               </div>
             )}
             {!collapsed && (

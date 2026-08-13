@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editors
+.idea/
+.vscode/
+
+# local agent settings
+.claude/settings.local.json
+
+# 임시 검증 스크립트 (Playwright 스냅샷 등)
+.*.mjs
+
+# 화면 캡처 산출물
+/output/
