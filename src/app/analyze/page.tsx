@@ -188,6 +188,12 @@ export default function AnalyzePage() {
   };
 
   /* ---------- 계약 대장 등록 ---------- */
+  /* 배너·우측 카드 두 진입점이 같은 액션이라 권한 검사도 한 곳에서 합니다 */
+  const openLedgerConfirm = () => {
+    if (!guard("confirmResult")) return;
+    setLedger("confirm");
+  };
+
   const startRegister = () => {
     if (!guard("confirmResult")) return;
     setLedger("running");
@@ -478,7 +484,7 @@ export default function AnalyzePage() {
                 </button>
               ) : (
                 <button
-                  onClick={() => { if (!guard("confirmResult")) return; setLedger("confirm"); }}
+                  onClick={openLedgerConfirm}
                   aria-disabled={!canConfirm}
                   title={reason("confirmResult") ?? undefined}
                   className={cn(
@@ -840,8 +846,13 @@ export default function AnalyzePage() {
                       <InfoRow ico={<FolderTree size={13} />} k="저장 위치" v={LEDGER_TARGET.path} />
                     </div>
                     <button
-                      onClick={() => setLedger("confirm")}
-                      className="mt-1 flex w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--accent)] py-3 text-[14px] font-bold text-white shadow-[0_4px_12px_-3px_rgba(15,110,130,.5)] transition hover:bg-[var(--accent-600)]"
+                      onClick={openLedgerConfirm}
+                      aria-disabled={!canConfirm}
+                      title={reason("confirmResult") ?? undefined}
+                      className={cn(
+                        "mt-1 flex w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--accent)] py-3 text-[14px] font-bold text-white shadow-[0_4px_12px_-3px_rgba(15,110,130,.5)] transition hover:bg-[var(--accent-600)]",
+                        !canConfirm && "cursor-not-allowed opacity-50",
+                      )}
                     >
                       <Database size={16} /> 계약 대장에 등록
                     </button>
@@ -1013,7 +1024,15 @@ export default function AnalyzePage() {
               <button onClick={() => setLedger("idle")} className="h-[38px] rounded-[9px] border border-line bg-surface px-4 text-[13px] font-semibold text-t2 transition hover:bg-surface-3">
                 취소
               </button>
-              <button onClick={startRegister} className="flex h-[38px] items-center gap-1.5 rounded-[9px] bg-[var(--accent)] px-4 text-[13px] font-bold text-white transition hover:bg-[var(--accent-600)]">
+              <button
+                onClick={startRegister}
+                aria-disabled={!canConfirm}
+                title={reason("confirmResult") ?? undefined}
+                className={cn(
+                  "flex h-[38px] items-center gap-1.5 rounded-[9px] bg-[var(--accent)] px-4 text-[13px] font-bold text-white transition hover:bg-[var(--accent-600)]",
+                  !canConfirm && "cursor-not-allowed opacity-50",
+                )}
+              >
                 <Database size={15} /> 등록 실행
               </button>
             </div>
