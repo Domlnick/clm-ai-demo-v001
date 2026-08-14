@@ -96,6 +96,9 @@ npm run lint      # ESLint
 | 파일 | 역할 |
 |---|---|
 | `src/lib/data.ts` | 분석 결과·처리 단계·검색·초안 등 화면 시나리오 데이터. 실제 OCR/LLM 응답을 같은 구조로 연결할 첫 교체 지점입니다 |
+| `src/components/document-viewer.tsx` | 결과 화면 좌측의 계약서 원문 패널 (PDF 원문 / OCR 텍스트 탭) |
+| `public/samples/catalyst-supply-contract.pdf` | 시연용 가상 계약서 원본 (12페이지) |
+| `scripts/generate_sample_contract.py` | 위 PDF 생성기 — 조항을 고치면 원문·OCR 텍스트를 다시 만들 수 있습니다 |
 | `src/lib/contracts.ts` | 계약 대장 코퍼스(버전 이력·조항 원문) |
 | `src/lib/playbooks.ts` | 협상 플레이북 기준·AI 반영안·재검토 주기 |
 | `src/lib/risk.ts` | 리스크 규칙 정의와 키워드 매칭 검색 |
@@ -105,5 +108,13 @@ npm run lint      # ESLint
 | `src/components/app-shell.tsx` | 헤더·사이드바·토스트를 포함한 공통 셸 |
 
 처리 단계와 소요 시간은 `src/lib/data.ts` 의 `PIPELINE` 에서 `ms` 값으로 조정합니다(현재 합계 4,800ms).
+
+샘플 계약서 PDF를 다시 만들려면 Python 가상환경에 ReportLab이 필요합니다. OCR 텍스트(`ANALYSIS_OCR`)와 조항 내용이 같아야 화면 값이 어긋나지 않습니다.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install reportlab
+.venv/bin/python scripts/generate_sample_contract.py
+```
 
 데모 상태를 처음으로 되돌리려면 `/risk` 화면의 `데모 초기화`(법무 관리자 권한) 를 누르거나 브라우저의 `localStorage` 를 지웁니다.

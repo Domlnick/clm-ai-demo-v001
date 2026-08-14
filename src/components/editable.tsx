@@ -11,7 +11,8 @@
    권한이 없으면 편집으로 진입하지 않고 사유를 토스트로 알립니다.
    ============================================================ */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Pencil, RotateCcw, UserPen, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/lib/permissions";
@@ -233,20 +234,47 @@ export function EditableChoice({
   const current = ed.value(k, original);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  /* 스크롤 컨테이너에 잘리지 않도록 메뉴를 body 로 띄우고 좌표를 직접 계산합니다 */
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const MENU_W = 240;
+  const place = useCallback(() => {
+    const r = trigger.current?.getBoundingClientRect();
+    if (!r) return;
+    const h = menu.current?.offsetHeight ?? 8 + options.length * 30;
+    const gap = 6;
+    /* 아래 공간이 부족하면 위로 뒤집습니다 */
+    const below = window.innerHeight - r.bottom;
+    const top = below < h + gap && r.top > h + gap ? r.top - h - gap : r.bottom + gap;
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - MENU_W - 8);
+    setPos({ left, top });
+  }, [options.length]);
 
   useEffect(() => {
     if (!open) return;
+    /* 실제 메뉴 높이가 정해진 뒤 한 번 더 맞춥니다 (위로 뒤집는 경우 대비) */
+    const raf = requestAnimationFrame(place);
     const onDown = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!box.current?.contains(t) && !menu.current?.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    /* 어느 컨테이너가 스크롤되든 따라 움직이게 캡처 단계에서 듣습니다 */
+    const onMove = () => place();
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
     };
-  }, [open]);
+  }, [open, place]);
 
   const label = options.find((o) => o.value === current)?.label ?? current;
 
@@ -254,12 +282,16 @@ export function EditableChoice({
     <span ref={box} className={cn("group/edit relative inline-flex items-center gap-1.5", className)}>
       {children ? children(current) : <span>{label}</span>}
       <button
+        ref={trigger}
         onClick={() => {
           if (!ed.canEdit) {
             ed.save(k, original, current);
             return;
           }
-          setOpen((o) => !o);
+          setOpen((o) => {
+            if (!o) place();
+            return !o;
+          });
         }}
         title={ed.canEdit ? "다시 판정" : (ed.deniedReason ?? undefined)}
         className={cn(
@@ -272,27 +304,35 @@ export function EditableChoice({
       </button>
       <EditedMark ed={ed} k={k} compact={compactMark} />
 
-      {open && (
-        <span className="absolute left-0 top-[26px] z-[80] flex w-[240px] flex-col overflow-hidden rounded-[11px] border border-line bg-surface py-1 shadow-[var(--shadow-pop)]">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => {
-                setOpen(false);
-                if (o.value !== current) ed.save(k, original, o.value);
-              }}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] transition hover:bg-surface-2",
-                o.value === current ? "font-bold text-[var(--accent-text)]" : "text-t2",
-              )}
-            >
-              {o.value === current ? <Check size={12} className="flex-shrink-0" /> : <span className="w-3 flex-shrink-0" />}
-              {o.label}
-              {o.value === original && <span className="ml-auto text-[10px] text-t4">AI 판정</span>}
-            </button>
-          ))}
-        </span>
-      )}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menu}
+            role="listbox"
+            style={{ position: "fixed", left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: MENU_W }}
+            className="z-[300] flex flex-col overflow-hidden rounded-[11px] border border-line bg-surface py-1 shadow-[var(--shadow-pop)]"
+          >
+            {options.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => {
+                  setOpen(false);
+                  if (o.value !== current) ed.save(k, original, o.value);
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] transition hover:bg-surface-2",
+                  o.value === current ? "font-bold text-[var(--accent-text)]" : "text-t2",
+                )}
+              >
+                {o.value === current ? <Check size={12} className="flex-shrink-0" /> : <span className="w-3 flex-shrink-0" />}
+                {o.label}
+                {o.value === original && <span className="ml-auto text-[10px] text-t4">AI 판정</span>}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </span>
   );
 }

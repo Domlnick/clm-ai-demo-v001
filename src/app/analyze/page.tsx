@@ -3,15 +3,16 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
-  UploadCloud, Sparkles, ShieldAlert, ListChecks,
+  UploadCloud, Sparkles, ListChecks,
   CheckCircle2, Loader2, RotateCcw, Download, ArrowRight, ScanText, Quote,
-  Database, FolderTree, Users, Clock, X, ShieldCheck, AlertTriangle, Zap, Plus,
+  Database, FolderTree, Users, Clock, X, ShieldCheck, AlertTriangle, Zap,
   BookCheck, Check,
 } from "lucide-react";
 import { Pill, Tag, SectionCard, FileType, ScoreRing, Bar } from "@/components/kit";
 import { ContractChat } from "@/components/contract-chat";
+import { DocumentViewer } from "@/components/document-viewer";
 import {
-  ANALYSIS, PIPELINE, PIPELINE_TOTAL_MS, SEG_LABEL, CONTRACT_TYPES, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
+  ANALYSIS, ANALYSIS_OCR, PIPELINE, PIPELINE_TOTAL_MS, SEG_LABEL, CONTRACT_TYPES, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
   type Seg,
 } from "@/lib/data";
 import { searchRule } from "@/lib/risk";
@@ -45,6 +46,17 @@ const RISK_LEVEL_OPTIONS = [
   { value: "ok", label: "표준" },
 ];
 const RISK_LABEL = { crit: "고위험", warn: "주의", ok: "표준" };
+/* 조항 카드 배경 — 플레이북 대비 차이 카드와 같은 색 규칙 */
+const RISK_CARD = {
+  crit: "border-[var(--red-line)] bg-[var(--red-soft)]",
+  warn: "border-[var(--amber-line)] bg-[var(--amber-soft)]",
+  ok: "border-[var(--green-line)] bg-[var(--green-soft)]",
+} as const;
+const RISK_TAG = {
+  crit: "bg-white/70 text-[#a52f22]",
+  warn: "bg-white/70 text-[#93610a]",
+  ok: "bg-white/70 text-[#0a6b42]",
+} as const;
 
 export default function AnalyzePage() {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -53,10 +65,8 @@ export default function AnalyzePage() {
   const [tab, setTab] = useState<"one" | "key" | "clause">("one");
   const [ledger, setLedger] = useState<Ledger>("idle");
   const [ledgerStep, setLedgerStep] = useState(0);
-  /* 탐지 리스크 label → 등록된 규칙 id */
-  const [registered, setRegistered] = useState<Record<string, string>>({});
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const { rules, addRule, setApplied, playbooks } = useStore();
+  const { addRule, setApplied, playbooks } = useStore();
   /* AI 결과를 사람이 고친 값 — 화면 전체가 이 실효값을 씁니다 */
   const ed = useResultEdits();
   /* 권한 — 리스크 등록·대장 등록은 법무 담당자 이상, 리포트 내보내기는 현업은 확정 후에만 */
@@ -69,10 +79,8 @@ export default function AnalyzePage() {
     (r: DetectedRisk) => edValue(`risk.${r.label}.level`, r.level) as "crit" | "warn" | "ok",
     [edValue],
   );
-  const critCount = ANALYSIS.risks.filter((r) => riskLevel(r) === "crit").length;
-  const warnCount = ANALYSIS.risks.filter((r) => riskLevel(r) === "warn").length;
   /* 사람이 "표준"으로 내린 항목은 미해소 리스크에서 빠집니다 */
-  const clearedCount = ANALYSIS.risks.length - critCount - warnCount;
+  const openRisks = ANALYSIS.risks.filter((r) => riskLevel(r) !== "ok");
 
   /* 분석 대상은 코퍼스의 C-24817 — 실제 조항 원문으로 플레이북과 대조한다 */
   const pbTarget = getContract("C-24817");
@@ -105,49 +113,6 @@ export default function AnalyzePage() {
   }, [pbEvals, activePb, addRule, setApplied, guard]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-
-  /* ---------- 탐지된 리스크를 규칙으로 등록 ---------- */
-  const registerRisk = useCallback((r: DetectedRisk, silent = false) => {
-    if (!allow("editSummary")) {
-      if (!silent) guard("editSummary");
-      return null;
-    }
-    const level = riskLevel(r);
-    if (level === "ok") {
-      if (!silent) toast(`『${r.label}』은 표준으로 조정되어 규칙으로 등록하지 않습니다`);
-      return null;
-    }
-    const { rule, created } = addRule({
-      title: r.label,
-      desc: `${ANALYSIS.file.name} 분석에서 탐지 — ${r.note}`,
-      /* 사람이 등급을 조정했으면 그 등급으로 규칙을 만듭니다 */
-      level,
-      keywords: [...r.keywords],
-      mode: r.mode,
-      source: "analysis",
-      sourceRef: "C-24817",
-      applied: true,
-    });
-    if (!created) setApplied(rule.id, true);
-    setRegistered((prev) => ({ ...prev, [r.label]: rule.id }));
-    if (!silent) {
-      const hits = searchRule(rule).length;
-      toast(created
-        ? `『${r.label}』을(를) 등록해 계약 ${hits}건에 적용했습니다`
-        : `이미 있는 규칙에 연결했습니다 — 계약 ${hits}건 적용`);
-    }
-    return rule;
-  }, [addRule, setApplied, allow, guard, riskLevel]);
-
-  const registerAllRisks = useCallback(() => {
-    if (!guard("editSummary")) return;
-    let total = 0;
-    for (const r of ANALYSIS.risks) {
-      const rule = registerRisk(r, true);
-      if (rule) total += searchRule(rule).length;
-    }
-    toast(`탐지된 리스크 ${ANALYSIS.risks.length}건을 등록했습니다 — 계약 ${total}건에 적용`);
-  }, [registerRisk, guard]);
 
   /* 파일 선택·드롭 — 프로토타입이라 실제 파일 대신 샘플 계약서를 첨부한 상태로 만듭니다 */
   const attachSample = useCallback(() => {
@@ -462,7 +427,7 @@ export default function AnalyzePage() {
                   !allow("copySummary", ledger === "done" ? "confirmed" : "aiGenerated") && "cursor-not-allowed opacity-50",
                 )}
               >
-                <ScanText size={14} /> OCR 텍스트
+                <ScanText size={14} /> OCR 내려받기
               </button>
               <button
                 onClick={() => {
@@ -498,9 +463,17 @@ export default function AnalyzePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[minmax(0,1fr)_340px]">
-            {/* left */}
-            <div className="flex flex-col gap-[18px]">
+          {/* 배너 아래 — 좌: 계약서 원문 / 우: 분석 결과 */}
+          <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)] xl:items-start">
+            <DocumentViewer
+              file={ANALYSIS.file}
+              ocrText={ANALYSIS_OCR}
+              previewUrl={ANALYSIS.file.previewUrl}
+              className="min-h-[880px] xl:h-[calc(100vh-210px)] xl:min-h-[720px]"
+            />
+
+            {/* 좌측 원문 패널과 같은 높이로 두고, 내용은 이 안에서 스크롤합니다 */}
+            <div className="flex flex-col gap-[18px] xl:h-[calc(100vh-210px)] xl:min-h-[720px] xl:overflow-y-auto xl:pr-1.5 [&>*]:flex-shrink-0">
               {/* 계약 유형 분류 */}
               <SectionCard
                 title="계약 유형 분류"
@@ -516,8 +489,8 @@ export default function AnalyzePage() {
                       <div className="text-[13px] font-bold text-t1">11개 유형 중 판정</div>
                     </div>
                   </div>
-                  <div className="grid min-w-[260px] flex-1 grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
-                    <EditRow ico={<ScanText size={13} />} k="계약 유형">
+                  <div className="grid min-w-[260px] flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                    <MetaCell ico={<ScanText size={13} />} k="계약 유형">
                       <EditableChoice
                         ed={ed}
                         k="meta.type"
@@ -525,8 +498,8 @@ export default function AnalyzePage() {
                         options={TYPE_OPTIONS}
                         compactMark
                       />
-                    </EditRow>
-                    <EditRow ico={<FolderTree size={13} />} k="업무 영역">
+                    </MetaCell>
+                    <MetaCell ico={<FolderTree size={13} />} k="업무 영역">
                       <EditableChoice
                         ed={ed}
                         k="meta.seg"
@@ -536,111 +509,12 @@ export default function AnalyzePage() {
                       >
                         {(v) => <span>{v} · {SEG_LABEL[v as Seg] ?? ""}</span>}
                       </EditableChoice>
-                    </EditRow>
-                    <InfoRow ico={<ScanText size={13} />} k="문서 언어" v={ANALYSIS.meta.language} />
-                    <InfoRow ico={<ShieldCheck size={13} />} k="준거법" v={ANALYSIS.meta.governing} />
+                    </MetaCell>
+                    <MetaCell ico={<ScanText size={13} />} k="문서 언어">{ANALYSIS.meta.language}</MetaCell>
+                    <MetaCell ico={<ShieldCheck size={13} />} k="준거법">{ANALYSIS.meta.governing}</MetaCell>
                   </div>
                 </div>
               </SectionCard>
-
-              {/* 플레이북 대비 차이 */}
-              <div id="pb-diff">
-                <SectionCard
-                  title="플레이북 대비 차이"
-                  icon={<BookCheck size={17} className="text-[var(--accent)]" />}
-                  sub={
-                    activePb
-                      ? `${activePb.dept} ${activePb.title} ${activePb.versions[activePb.versions.length - 1].v} 기준 · ${reviewLabel(activePb)}`
-                      : "이 계약 유형에 맞는 확정 플레이북이 없습니다"
-                  }
-                  bodyClass="p-0"
-                  right={
-                    activePb && (
-                      <Link href={`/playbook/${activePb.id}`} className="flex h-[30px] items-center gap-1 rounded-[8px] border border-line px-2.5 text-[11.5px] font-bold text-t2 transition hover:bg-surface-2">
-                        플레이북 <ArrowRight size={12} />
-                      </Link>
-                    )
-                  }
-                >
-                  {!activePb || !pbTarget ? (
-                    <p className="px-5 py-8 text-center text-[12.5px] text-t4">
-                      대조할 확정 플레이북이 없습니다. 협상 플레이북에서 먼저 기준을 확정해 주세요.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-5 py-3.5">
-                        <div className="flex items-baseline gap-1">
-                          <span className="num text-[26px] font-bold leading-none tracking-[-1px] text-[var(--red)]">{pbSummary.deviation}</span>
-                          <span className="text-[12px] text-t3">개 항목이 플레이북과 다릅니다</span>
-                        </div>
-                        <div className="ml-auto flex flex-wrap items-center gap-2">
-                          <Pill tone="crit" dot>다름 {pbSummary.deviation}</Pill>
-                          <Pill tone="ok" dot>준수 {pbSummary.ok}</Pill>
-                          <Pill tone="warn" dot>미규정 {pbSummary.missing}</Pill>
-                        </div>
-                      </div>
-                      {pbEvals.map((e) => (
-                        <div key={e.item.id} className="border-b border-line-soft px-5 py-3.5 last:border-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="num flex h-[24px] items-center rounded-[7px] bg-surface-3 px-2 text-[11px] font-extrabold text-t3">{e.item.no}</span>
-                            <span className="text-[13.5px] font-bold text-t1">{e.item.title}</span>
-                            <Pill tone={PB_ITEM_STATE_META[e.state].tone} className="h-[19px] text-[10.5px]">{PB_ITEM_STATE_META[e.state].label}</Pill>
-                            <span className="num ml-auto text-[11px] text-t4">
-                              {e.clause ? `${e.clause.no} ${e.clause.title}` : "해당 조항 없음"}
-                            </span>
-                          </div>
-                          {e.state === "ok" ? (
-                            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-t3">
-                              <Check size={13} className="text-[var(--green)]" /> 기준 충족 — {e.item.standard}
-                            </p>
-                          ) : e.state === "missing" ? (
-                            <div className="mt-2 rounded-[11px] border border-[var(--amber-line)] bg-[var(--amber-soft)] p-3">
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-[#93610a]/80">이 계약에는 대응 조항이 없습니다</span>
-                              <p className="mt-1 text-[12.5px] leading-[1.7] text-t2">권장 문안 · {e.item.standard}</p>
-                            </div>
-                          ) : (
-                            <div className="mt-2 grid grid-cols-1 gap-2.5 md:grid-cols-2">
-                              <div className="rounded-[11px] border border-[var(--red-line)] bg-[var(--red-soft)] p-3">
-                                <span className="text-[10px] font-bold uppercase tracking-wide text-[#a52f22]/80">
-                                  이 계약 · {e.clause?.no} {e.clause?.title}
-                                </span>
-                                <p className="mt-1 text-[12.5px] leading-[1.7] text-t2">{e.clause?.body}</p>
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  {e.deviated.map((d) => (
-                                    <Tag key={d} className="h-[17px] bg-white/70 text-[9.5px] text-[#a52f22]">{d}</Tag>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="rounded-[11px] border border-[#bcd9e0] bg-[var(--accent-soft)] p-3">
-                                <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent-text)]/70">플레이북 기준 · {e.item.no}</span>
-                                <p className="mt-1 text-[12.5px] font-semibold leading-[1.7] text-[var(--accent-text)]">{e.item.standard}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {pbSummary.deviation > 0 && (
-                        <div className="flex flex-wrap items-center gap-2.5 border-t border-line-soft bg-surface-2 px-5 py-3">
-                          <span className="min-w-0 flex-1 text-[11.5px] text-t3">
-                            이탈 항목을 리스크 규칙으로 등록하면 같은 조항이 있는 다른 계약에도 적용됩니다.
-                          </span>
-                          <button
-                            onClick={registerPbDeviations}
-                            aria-disabled={!canEdit}
-                            title={reason("editSummary") ?? undefined}
-                            className={cn(
-                              "flex h-[32px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3.5 text-[12.5px] font-bold text-white transition hover:bg-[var(--accent-600)]",
-                              !canEdit && "cursor-not-allowed opacity-50",
-                            )}
-                          >
-                            <Zap size={14} /> 이탈 {pbSummary.deviation}건 리스크로 등록
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </SectionCard>
-              </div>
 
               {/* AI Summary — 3층 요약 + 대장 필드를 한 섹션으로 */}
               <SectionCard
@@ -701,8 +575,10 @@ export default function AnalyzePage() {
                   )}
                   {tab === "clause" && (
                     <div className="flex flex-col gap-2.5">
-                      {ANALYSIS.clauses.map((c) => (
-                        <div key={c.no} className="rounded-[12px] border border-line bg-surface-2 p-3.5">
+                      {ANALYSIS.clauses.map((c) => {
+                        const lv = ed.value(`clause.${c.no}.risk`, c.risk) as keyof typeof RISK_CARD;
+                        return (
+                        <div key={c.no} className={cn("rounded-[12px] border p-3.5", RISK_CARD[lv] ?? RISK_CARD.ok)}>
                           <div className="mb-1.5 flex items-center gap-2">
                             <span className="num text-[12px] font-bold text-[var(--accent)]">{c.no}</span>
                             <span className="text-[13.5px] font-bold text-t1">{c.title}</span>
@@ -732,10 +608,13 @@ export default function AnalyzePage() {
                             compactMark
                           />
                           <div className="mt-2 flex flex-wrap gap-1.5">
-                            {c.tags.map((t) => <Tag key={t} className="text-[10.5px]">#{t}</Tag>)}
+                            {c.tags.map((t) => (
+                              <Tag key={t} className={cn("text-[10.5px]", RISK_TAG[lv] ?? RISK_TAG.ok)}>#{t}</Tag>
+                            ))}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -775,6 +654,116 @@ export default function AnalyzePage() {
                 </div>
               </SectionCard>
 
+              {/* 플레이북 대비 차이 */}
+              <div id="pb-diff">
+                <SectionCard
+                  title="플레이북 대비 차이"
+                  icon={<BookCheck size={17} className="text-[var(--accent)]" />}
+                  sub={
+                    activePb
+                      ? `${activePb.dept} ${activePb.title} ${activePb.versions[activePb.versions.length - 1].v} 기준 · ${reviewLabel(activePb)}`
+                      : "이 계약 유형에 맞는 확정 플레이북이 없습니다"
+                  }
+                  bodyClass="p-0"
+                  right={
+                    activePb && (
+                      <Link href={`/playbook/${activePb.id}`} className="flex h-[30px] items-center gap-1 rounded-[8px] border border-line px-2.5 text-[11.5px] font-bold text-t2 transition hover:bg-surface-2">
+                        플레이북 <ArrowRight size={12} />
+                      </Link>
+                    )
+                  }
+                >
+                  {!activePb || !pbTarget ? (
+                    <p className="px-5 py-8 text-center text-[12.5px] text-t4">
+                      대조할 확정 플레이북이 없습니다. 협상 플레이북에서 먼저 기준을 확정해 주세요.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-5 py-3.5">
+                        <div className="flex items-baseline gap-1">
+                          <span className="num text-[26px] font-bold leading-none tracking-[-1px] text-[var(--red)]">{pbSummary.deviation}</span>
+                          <span className="text-[12px] text-t3">개 항목이 플레이북과 다릅니다</span>
+                        </div>
+                        <div className="ml-auto flex flex-wrap items-center gap-2">
+                          <Pill tone="crit" dot>다름 {pbSummary.deviation}</Pill>
+                          <Pill tone="ok" dot>준수 {pbSummary.ok}</Pill>
+                          <Pill tone="warn" dot>미규정 {pbSummary.missing}</Pill>
+                        </div>
+                      </div>
+                      {pbEvals.map((e) => (
+                        <div key={e.item.id} className="border-b border-line-soft px-5 py-3.5 last:border-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="num flex h-[24px] items-center rounded-[7px] bg-surface-3 px-2 text-[11px] font-extrabold text-t3">{e.item.no}</span>
+                            <span className="text-[13.5px] font-bold text-t1">{e.item.title}</span>
+                            <Pill tone={PB_ITEM_STATE_META[e.state].tone} className="h-[19px] text-[10.5px]">{PB_ITEM_STATE_META[e.state].label}</Pill>
+                            <span className="num ml-auto text-[11px] text-t4">
+                              {e.clause ? `${e.clause.no} ${e.clause.title}` : "해당 조항 없음"}
+                            </span>
+                          </div>
+                          {e.state === "ok" ? (
+                            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-t3">
+                              <Check size={13} className="text-[var(--green)]" /> 기준 충족 — {e.item.standard}
+                            </p>
+                          ) : e.state === "missing" ? (
+                            <div className="mt-2 rounded-[11px] border border-[var(--amber-line)] bg-[var(--amber-soft)] p-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-[#93610a]/80">이 계약에는 대응 조항이 없습니다</span>
+                              <p className="mt-1 text-[12.5px] leading-[1.7] text-t2">권장 문안 · {e.item.standard}</p>
+                            </div>
+                          ) : (
+                            /* 폭이 좁아 좌우 비교가 어려워, 문장을 위아래로 붙여 대조합니다 */
+                            <div className="mt-2 overflow-hidden rounded-[11px] border border-line-soft">
+                              <div className="flex items-start gap-2.5 border-b border-line-soft bg-[var(--red-soft)] px-3 py-2.5">
+                                <span className="mt-px flex-shrink-0 rounded-[6px] bg-white/80 px-1.5 py-px text-[10px] font-bold text-[#a52f22]">
+                                  이 계약
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <span className="num text-[10.5px] font-semibold text-[#a52f22]/85">
+                                    {e.clause?.no} {e.clause?.title}
+                                  </span>
+                                  <p className="mt-0.5 text-[12.5px] leading-[1.7] text-t2">{e.clause?.body}</p>
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {e.deviated.map((d) => (
+                                      <Tag key={d} className="h-[17px] bg-white/70 text-[9.5px] text-[#a52f22]">{d}</Tag>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2.5 bg-[var(--accent-soft)] px-3 py-2.5">
+                                <span className="mt-px flex-shrink-0 rounded-[6px] bg-white/80 px-1.5 py-px text-[10px] font-bold text-[var(--accent-text)]">
+                                  플레이북
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <span className="num text-[10.5px] font-semibold text-[var(--accent-text)]/75">{e.item.no} 기준</span>
+                                  <p className="mt-0.5 text-[12.5px] font-semibold leading-[1.7] text-[var(--accent-text)]">{e.item.standard}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {pbSummary.deviation > 0 && (
+                        <div className="flex flex-wrap items-center gap-2.5 border-t border-line-soft bg-surface-2 px-5 py-3">
+                          <span className="min-w-0 flex-1 text-[11.5px] text-t3">
+                            이탈 항목을 리스크 규칙으로 등록하면 같은 조항이 있는 다른 계약에도 적용됩니다.
+                          </span>
+                          <button
+                            onClick={registerPbDeviations}
+                            aria-disabled={!canEdit}
+                            title={reason("editSummary") ?? undefined}
+                            className={cn(
+                              "flex h-[32px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3.5 text-[12.5px] font-bold text-white transition hover:bg-[var(--accent-600)]",
+                              !canEdit && "cursor-not-allowed opacity-50",
+                            )}
+                          >
+                            <Zap size={14} /> 이탈 {pbSummary.deviation}건 리스크로 등록
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </SectionCard>
+              </div>
+
               {/* 선례 비교 채팅 */}
               <ContractChat
                 title="선례 비교 Q&A"
@@ -786,188 +775,15 @@ export default function AnalyzePage() {
               />
 
             </div>
-
-            {/* right rail */}
-            <div className="flex flex-col gap-[18px]">
-              {/* 대장 등록 */}
-              <SectionCard
-                title={ledger === "done" ? "계약 대장 등록 완료" : "검토 완료 · 대장 등록"}
-                icon={ledger === "done"
-                  ? <CheckCircle2 size={17} className="text-[var(--green)]" />
-                  : <Database size={17} className="text-[var(--accent)]" />}
-                sub={ledger === "done" ? `${LEDGER_TARGET.newId} · 검색 인덱스 반영됨` : "분석 결과를 사내 계약 저장소에 반영합니다"}
-                bodyClass="p-4"
-                className={ledger === "done" ? "border-[var(--green-line)]" : "border-[#cfe6eb]"}
-              >
-                {ledger === "running" ? (
-                  <div className="flex flex-col gap-2">
-                    {LEDGER_TARGET.steps.map((s, i) => {
-                      const st = i < ledgerStep ? "done" : i === ledgerStep ? "active" : "wait";
-                      return (
-                        <div key={s.key} className={cn("flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 transition", st === "active" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : st === "done" ? "border-line-soft bg-surface-2" : "border-line-soft opacity-50")}>
-                          <span className={cn("flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[8px] text-[10px] font-extrabold", st === "done" ? "bg-[var(--green-soft)] text-[#0a6b42]" : st === "active" ? "bg-white text-[var(--accent)]" : "bg-surface-3 text-t4")}>
-                            {st === "done" ? <CheckCircle2 size={15} /> : st === "active" ? <Loader2 size={13} className="animate-spin" /> : s.key}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[12.5px] font-bold text-t1">{s.label}</div>
-                            <div className="text-[10.5px] text-t4">{s.detail}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : ledger === "done" ? (
-                  <div className="flex flex-col gap-2.5">
-                    <div className="flex items-center gap-2.5 rounded-[11px] border border-[var(--green-line)] bg-[var(--green-soft)] p-3">
-                      <ShieldCheck size={20} className="flex-shrink-0 text-[#0a6b42]" />
-                      <div className="min-w-0">
-                        <div className="num text-[13.5px] font-bold text-[#0a6b42]">{LEDGER_TARGET.newId}</div>
-                        <div className="text-[11px] text-[#0a6b42]/80">계약 대장 반영 · 검색 인덱싱 완료</div>
-                      </div>
-                    </div>
-                    <InfoRow ico={<FolderTree size={13} />} k="저장 위치" v={LEDGER_TARGET.path} />
-                    <InfoRow ico={<Users size={13} />} k="알림 발송" v={`${LEDGER_TARGET.notify.length}명 통지 완료`} />
-                    <InfoRow ico={<Clock size={13} />} k="갱신 알림" v="만료 90일 전 자동 예약" />
-                    <InfoRow ico={<AlertTriangle size={13} />} k="리스크 큐" v="고위험 1건 · 재검토 대상 등록" />
-                    <button onClick={() => toast("계약 대장에서 문서를 엽니다 (프로토타입)")} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-[9px] border border-line py-2.5 text-[12.5px] font-semibold text-t2 transition hover:bg-surface-2">
-                      대장에서 열기 <ArrowRight size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
-                    <div className="flex flex-col gap-2 text-[12.3px]">
-                      <InfoRow ico={<ListChecks size={13} />} k="검증된 필드" v={`${ANALYSIS.fields.length}개 전부 확인`} />
-                      <InfoRow
-                        ico={<ShieldAlert size={13} />}
-                        k="미해소 리스크"
-                        v={`고위험 ${critCount}건 · 주의 ${warnCount}건${clearedCount > 0 ? ` · 표준 처리 ${clearedCount}건` : ""}`}
-                        warn={critCount + warnCount > 0}
-                      />
-                      <InfoRow ico={<FolderTree size={13} />} k="저장 위치" v={LEDGER_TARGET.path} />
-                    </div>
-                    <button
-                      onClick={openLedgerConfirm}
-                      aria-disabled={!canConfirm}
-                      title={reason("confirmResult") ?? undefined}
-                      className={cn(
-                        "mt-1 flex w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--accent)] py-3 text-[14px] font-bold text-white shadow-[0_4px_12px_-3px_rgba(15,110,130,.5)] transition hover:bg-[var(--accent-600)]",
-                        !canConfirm && "cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      <Database size={16} /> 계약 대장에 등록
-                    </button>
-                    <p className="text-[11px] leading-relaxed text-t4">
-                      등록하면 추출된 필드가 대장에 기록되고, 조항이 검색 인덱스에 반영되어 이후 유사 계약 검색에 활용됩니다.
-                    </p>
-                  </div>
-                )}
-              </SectionCard>
-
-              {/* risk */}
-              <SectionCard
-                title="리스크 플래그"
-                icon={<ShieldAlert size={17} className="text-[var(--red)]" />}
-                sub="탐지된 리스크를 규칙으로 등록하면 전체 계약에서 같은 조항을 찾아 적용합니다"
-                bodyClass="p-4"
-                right={
-                  <button
-                    onClick={registerAllRisks}
-                    aria-disabled={!canEdit}
-                    title={reason("editSummary") ?? undefined}
-                    className={cn(
-                      "flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-2.5 text-[11.5px] font-bold text-white transition hover:bg-[var(--accent-600)]",
-                      !canEdit && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    <Zap size={13} /> 전체 등록·적용
-                  </button>
-                }
-              >
-                <div className="flex flex-col gap-2.5">
-                  {ANALYSIS.risks.map((r) => {
-                    const reg = registered[r.label];
-                    const rule = reg ? rules.find((x) => x.id === reg) : undefined;
-                    const hits = rule ? searchRule(rule).length : 0;
-                    const lv = riskLevel(r);
-                    return (
-                      <div
-                        className={cn(
-                          "rounded-[11px] border p-3",
-                          lv === "crit"
-                            ? "border-[var(--red-line)] bg-[var(--red-soft)]"
-                            : lv === "warn"
-                              ? "border-[var(--amber-line)] bg-[var(--amber-soft)]"
-                              : "border-[var(--green-line)] bg-[var(--green-soft)]",
-                        )}
-                        key={r.label}
-                      >
-                        <div className="flex items-center gap-3">
-                          <ShieldAlert
-                            size={18}
-                            className={lv === "crit" ? "text-[var(--red)]" : lv === "warn" ? "text-[var(--amber)]" : "text-[var(--green)]"}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-bold text-t1">{r.label}</div>
-                            <div className="text-[11.5px] text-t3">{r.note}</div>
-                          </div>
-                          <EditableChoice
-                            ed={ed}
-                            k={`risk.${r.label}.level`}
-                            original={r.level}
-                            options={RISK_LEVEL_OPTIONS}
-                            compactMark
-                          >
-                            {(v) => (
-                              <Pill tone={RISK_TONE[v as keyof typeof RISK_TONE]}>
-                                {RISK_LABEL[v as keyof typeof RISK_LABEL]}
-                              </Pill>
-                            )}
-                          </EditableChoice>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="flex flex-wrap gap-1">
-                            {r.keywords.map((k) => <Tag key={k} className="h-[17px] bg-white/70 text-[9.5px]">{k}</Tag>)}
-                          </div>
-                          {rule ? (
-                            <Link href="/risk" className="ml-auto flex h-[26px] items-center gap-1.5 rounded-[7px] border border-[var(--green-line)] bg-[var(--green-soft)] px-2.5 text-[11px] font-bold text-[#0a6b42]">
-                              <CheckCircle2 size={12} /> 등록됨 · {hits}건 적용
-                            </Link>
-                          ) : (
-                            <button
-                              onClick={() => registerRisk(r)}
-                              aria-disabled={!canEdit}
-                              title={reason("editSummary") ?? undefined}
-                              className={cn(
-                                "ml-auto flex h-[26px] items-center gap-1.5 rounded-[7px] border border-line bg-white px-2.5 text-[11px] font-bold text-t2 transition hover:border-[var(--accent)] hover:text-[var(--accent)]",
-                                !canEdit && "cursor-not-allowed opacity-50",
-                              )}
-                            >
-                              <Plus size={12} /> 리스크 등록
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className="mt-1 flex items-center justify-between rounded-[11px] bg-surface-2 px-3.5 py-3">
-                    <span className="text-[12.5px] font-semibold text-t2">종합 리스크 점수</span>
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-24"><Bar value={62} tone="warn" /></div>
-                      <span className="num text-[13px] font-bold text-[var(--amber)]">62 / 100</span>
-                    </div>
-                  </div>
-                </div>
-              </SectionCard>
-            </div>
           </div>
         </>
       )}
 
-      {/* ===== 등록 확인 모달 ===== */}
-      {ledger === "confirm" && (
+      {/* ===== 등록 확인·진행 모달 ===== */}
+      {(ledger === "confirm" || ledger === "running") && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-[#0d1b1f]/45 px-4 py-8 backdrop-blur-[2px]"
-          onClick={() => setLedger("idle")}
+          onClick={() => ledger === "confirm" && setLedger("idle")}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -978,14 +794,59 @@ export default function AnalyzePage() {
                 <Database size={18} />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-bold text-t1">계약 대장에 등록할까요?</div>
-                <div className="text-[11.5px] text-t3">등록하면 대장·검색 인덱스에 반영되고 관계자에게 통지됩니다</div>
+                <div className="text-[15px] font-bold text-t1">
+                  {ledger === "running" ? "계약 대장에 등록하는 중" : "계약 대장에 등록할까요?"}
+                </div>
+                <div className="text-[11.5px] text-t3">
+                  {ledger === "running"
+                    ? "필드 검증 → 중복 확인 → 대장 반영 → 인덱싱 → 통지 순서로 진행합니다"
+                    : "등록하면 대장·검색 인덱스에 반영되고 관계자에게 통지됩니다"}
+                </div>
               </div>
-              <button onClick={() => setLedger("idle")} className="flex h-8 w-8 items-center justify-center rounded-lg text-t4 transition hover:bg-surface-2 hover:text-t2" aria-label="닫기">
-                <X size={17} />
-              </button>
+              {ledger === "confirm" && (
+                <button onClick={() => setLedger("idle")} className="flex h-8 w-8 items-center justify-center rounded-lg text-t4 transition hover:bg-surface-2 hover:text-t2" aria-label="닫기">
+                  <X size={17} />
+                </button>
+              )}
             </div>
 
+            {ledger === "running" ? (
+              <div className="flex flex-col gap-2 px-5 py-4">
+                {LEDGER_TARGET.steps.map((s, i) => {
+                  const st = i < ledgerStep ? "done" : i === ledgerStep ? "active" : "wait";
+                  return (
+                    <div
+                      key={s.key}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 transition",
+                        st === "active"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                          : st === "done"
+                            ? "border-line-soft bg-surface-2"
+                            : "border-line-soft opacity-50",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[8px] text-[10px] font-extrabold",
+                          st === "done"
+                            ? "bg-[var(--green-soft)] text-[#0a6b42]"
+                            : st === "active"
+                              ? "bg-white text-[var(--accent)]"
+                              : "bg-surface-3 text-t4",
+                        )}
+                      >
+                        {st === "done" ? <CheckCircle2 size={15} /> : st === "active" ? <Loader2 size={13} className="animate-spin" /> : s.key}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12.5px] font-bold text-t1">{s.label}</div>
+                        <div className="text-[10.5px] text-t4">{s.detail}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
             <div className="flex flex-col gap-3 px-5 py-4">
               <div className="flex items-center gap-3 rounded-[11px] border border-line bg-surface-2 p-3">
                 <FileType type={ANALYSIS.file.ft} size={34} />
@@ -996,12 +857,16 @@ export default function AnalyzePage() {
                 <Pill tone="accent">{LEDGER_TARGET.newId}</Pill>
               </div>
 
-              <div className="rounded-[11px] border border-[var(--amber-line)] bg-[var(--amber-soft)] p-3">
-                <div className="flex items-center gap-2 text-[12.5px] font-bold text-[#93610a]">
-                  <AlertTriangle size={15} /> 미해소 리스크가 있는 상태로 등록됩니다
+              <div className={cn("rounded-[11px] border p-3", openRisks.length > 0 ? "border-[var(--amber-line)] bg-[var(--amber-soft)]" : "border-[var(--green-line)] bg-[var(--green-soft)]")}>
+                <div className={cn("flex items-center gap-2 text-[12.5px] font-bold", openRisks.length > 0 ? "text-[#93610a]" : "text-[#0a6b42]")}>
+                  {openRisks.length > 0 ? (
+                    <><AlertTriangle size={15} /> 미해소 리스크 {openRisks.length}건이 있는 상태로 등록됩니다</>
+                  ) : (
+                    <><ShieldCheck size={15} /> 탐지된 리스크가 모두 표준으로 정리되었습니다</>
+                  )}
                 </div>
                 <ul className="mt-1.5 flex flex-col gap-1 pl-[22px] text-[11.5px] text-[#93610a]">
-                  {ANALYSIS.risks.map((r) => (
+                  {openRisks.map((r) => (
                     <li key={r.label} className="list-disc">{r.label} — {r.note}</li>
                   ))}
                 </ul>
@@ -1018,7 +883,9 @@ export default function AnalyzePage() {
                 <InfoRow ico={<Clock size={13} />} k="보존 기간" v={LEDGER_TARGET.retention} />
               </div>
             </div>
+            )}
 
+            {ledger === "confirm" && (
             <div className="flex items-center gap-2.5 border-t border-line-soft bg-surface-2 px-5 py-3.5">
               <span className="flex-1 text-[11px] text-t4">프로토타입 — 실제 저장소에는 반영되지 않습니다</span>
               <button onClick={() => setLedger("idle")} className="h-[38px] rounded-[9px] border border-line bg-surface px-4 text-[13px] font-semibold text-t2 transition hover:bg-surface-3">
@@ -1036,6 +903,7 @@ export default function AnalyzePage() {
                 <Database size={15} /> 등록 실행
               </button>
             </div>
+            )}
           </div>
         </div>
       )}
@@ -1043,13 +911,21 @@ export default function AnalyzePage() {
   );
 }
 
-/** 편집 가능한 값을 InfoRow 와 같은 모양으로 감싸는 행 */
-function EditRow({ ico, k, children }: { ico: React.ReactNode; k: string; children: React.ReactNode }) {
+/**
+ * 분류 카드의 항목 한 칸.
+ * 값 옆에 "수정" 배지·되돌리기가 붙어도 줄이 흐트러지지 않도록
+ * 라벨을 위에, 값을 아래에 두는 대장 필드와 같은 형태로 맞췄습니다.
+ */
+function MetaCell({ ico, k, children }: { ico: React.ReactNode; k: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 text-[12.5px]">
-      <span className="mt-[3px] flex-shrink-0 text-t4">{ico}</span>
-      <span className="flex-shrink-0 text-t4">{k}</span>
-      <span className="ml-auto text-right font-semibold text-t1">{children}</span>
+    <div className="rounded-[10px] border border-line-soft bg-surface-2 px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-t4">
+        <span className="flex-shrink-0">{ico}</span>
+        {k}
+      </div>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] font-semibold leading-[1.5] text-t1">
+        {children}
+      </div>
     </div>
   );
 }

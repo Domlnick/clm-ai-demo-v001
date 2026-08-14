@@ -65,3 +65,7 @@ next-env.d.ts
 
 # 세션 잔여 폴더
 /99.git/
+
+# Python (샘플 PDF 생성용)
+.venv/
+__pycache__/
