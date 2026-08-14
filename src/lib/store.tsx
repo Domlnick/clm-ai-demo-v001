@@ -32,6 +32,16 @@ export type NewRule = {
   applied?: boolean;
 };
 
+/** AI 결과를 사람이 고친 기록 — 경로 키 하나에 값 + 수정자 + 시각 */
+export type AnalysisEdit = {
+  /** 사람이 넣은 값. 빈 문자열도 유효한 값이라 삭제와 구분합니다 */
+  value: string;
+  /** AI 원본 — 되돌리기와 비교 표시에 사용 */
+  original: string;
+  by: string;
+  at: string;
+};
+
 type State = {
   rules: RiskRule[];
   statuses: Record<string, ContractStatus>;
@@ -40,6 +50,13 @@ type State = {
   playbooks: Playbook[];
   /** 플레이북 항목 id → 등록된 리스크 규칙 id */
   pbRules: Record<string, string>;
+  /**
+   * 분석 결과 수정 기록. 키는 항목 경로:
+   *   meta.type · meta.seg · summary1 · summary2.<index>
+   *   field.<필드명> · clause.<조번호>.body · clause.<조번호>.risk
+   *   risk.<리스크 라벨>.level
+   */
+  edits: Record<string, AnalysisEdit>;
 };
 
 const seedState = (): State => ({
@@ -48,6 +65,7 @@ const seedState = (): State => ({
   flaggedChanges: {},
   playbooks: PLAYBOOKS,
   pbRules: {},
+  edits: {},
 });
 
 /* 서버 렌더 / 하이드레이션 때 쓰는 고정 스냅샷 */
@@ -67,6 +85,7 @@ function load(): State {
         rules: Array.isArray(parsed.rules) && parsed.rules.length ? parsed.rules : base.rules,
         statuses: { ...base.statuses, ...(parsed.statuses ?? {}) },
         flaggedChanges: parsed.flaggedChanges ?? {},
+        edits: parsed.edits ?? {},
         playbooks:
           Array.isArray(parsed.playbooks) && parsed.playbooks.length ? parsed.playbooks : base.playbooks,
         pbRules: parsed.pbRules ?? {},
@@ -318,6 +337,33 @@ export function registerPbItemRule(pbId: string, itemId: string) {
   return res;
 }
 
+/* ---------- 분석 결과 수정 ---------- */
+
+/** 항목 하나를 사람이 고친 값으로 기록. 원본과 같아지면 기록을 지웁니다 */
+export function setEdit(key: string, value: string, original: string, by: string) {
+  update((s) => {
+    const next = { ...s.edits };
+    if (value === original) delete next[key];
+    else next[key] = { value, original, by, at: new Date().toISOString().slice(0, 16).replace("T", " ") };
+    return { ...s, edits: next };
+  });
+}
+
+/** 수정 취소 — AI 원본으로 되돌립니다 */
+export function clearEdit(key: string) {
+  update((s) => {
+    if (!s.edits[key]) return s;
+    const next = { ...s.edits };
+    delete next[key];
+    return { ...s, edits: next };
+  });
+}
+
+/** 분석 결과 수정 기록 전체 삭제 */
+export function clearAllEdits() {
+  update((s) => (Object.keys(s.edits).length === 0 ? s : { ...s, edits: {} }));
+}
+
 /** 시드 상태로 되돌리기 (데모 초기화용) */
 export function resetStore() {
   if (typeof window !== "undefined") {
@@ -341,6 +387,10 @@ export function useStore() {
     flaggedChanges: s.flaggedChanges,
     playbooks: s.playbooks,
     pbRules: s.pbRules,
+    edits: s.edits,
+    setEdit,
+    clearEdit,
+    clearAllEdits,
     addRule,
     updateRule,
     removeRule,

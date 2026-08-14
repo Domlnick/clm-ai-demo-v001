@@ -11,7 +11,8 @@ import {
 import { Pill, Tag, SectionCard, FileType, ScoreRing, Bar } from "@/components/kit";
 import { ContractChat } from "@/components/contract-chat";
 import {
-  ANALYSIS, PIPELINE, PIPELINE_TOTAL_MS, SEG_LABEL, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
+  ANALYSIS, PIPELINE, PIPELINE_TOTAL_MS, SEG_LABEL, CONTRACT_TYPES, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
+  type Seg,
 } from "@/lib/data";
 import { searchRule } from "@/lib/risk";
 import { getContract } from "@/lib/contracts";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/playbooks";
 import { useStore } from "@/lib/store";
 import { usePermissions } from "@/lib/permissions";
+import { EditSummaryChip, EditableChoice, EditableText, useResultEdits } from "@/components/editable";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,19 @@ type DetectedRisk = (typeof ANALYSIS.risks)[number];
 type Phase = "idle" | "ready" | "processing" | "done";
 type Ledger = "idle" | "confirm" | "running" | "done";
 const RISK_TONE = { crit: "crit", warn: "warn", ok: "ok" } as const;
+
+/* 사람이 다시 판정할 때 고르는 값들 */
+const TYPE_OPTIONS = CONTRACT_TYPES.map((t) => ({ value: t.name, label: t.name })).concat(
+  CONTRACT_TYPES.some((t) => t.name === ANALYSIS.meta.type)
+    ? []
+    : [{ value: ANALYSIS.meta.type, label: ANALYSIS.meta.type }],
+);
+const SEG_OPTIONS = (Object.keys(SEG_LABEL) as Seg[]).map((sg) => ({ value: sg, label: `${sg} · ${SEG_LABEL[sg]}` }));
+const RISK_LEVEL_OPTIONS = [
+  { value: "crit", label: "고위험" },
+  { value: "warn", label: "주의" },
+  { value: "ok", label: "표준" },
+];
 const RISK_LABEL = { crit: "고위험", warn: "주의", ok: "표준" };
 
 export default function AnalyzePage() {
@@ -42,11 +57,22 @@ export default function AnalyzePage() {
   const [registered, setRegistered] = useState<Record<string, string>>({});
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const { rules, addRule, setApplied, playbooks } = useStore();
+  /* AI 결과를 사람이 고친 값 — 화면 전체가 이 실효값을 씁니다 */
+  const ed = useResultEdits();
   /* 권한 — 리스크 등록·대장 등록은 법무 담당자 이상, 리포트 내보내기는 현업은 확정 후에만 */
   const { allow, guard, reason } = usePermissions();
   const canEdit = allow("editSummary");
   const canConfirm = allow("confirmResult");
-  const critCount = ANALYSIS.risks.filter((r) => r.level === "crit").length;
+  /* 리스크 등급은 사람이 조정할 수 있어, 집계도 실효 등급 기준으로 냅니다 */
+  const edValue = ed.value;
+  const riskLevel = useCallback(
+    (r: DetectedRisk) => edValue(`risk.${r.label}.level`, r.level) as "crit" | "warn" | "ok",
+    [edValue],
+  );
+  const critCount = ANALYSIS.risks.filter((r) => riskLevel(r) === "crit").length;
+  const warnCount = ANALYSIS.risks.filter((r) => riskLevel(r) === "warn").length;
+  /* 사람이 "표준"으로 내린 항목은 미해소 리스크에서 빠집니다 */
+  const clearedCount = ANALYSIS.risks.length - critCount - warnCount;
 
   /* 분석 대상은 코퍼스의 C-24817 — 실제 조항 원문으로 플레이북과 대조한다 */
   const pbTarget = getContract("C-24817");
@@ -86,10 +112,16 @@ export default function AnalyzePage() {
       if (!silent) guard("editSummary");
       return null;
     }
+    const level = riskLevel(r);
+    if (level === "ok") {
+      if (!silent) toast(`『${r.label}』은 표준으로 조정되어 규칙으로 등록하지 않습니다`);
+      return null;
+    }
     const { rule, created } = addRule({
       title: r.label,
       desc: `${ANALYSIS.file.name} 분석에서 탐지 — ${r.note}`,
-      level: r.level as "crit" | "warn",
+      /* 사람이 등급을 조정했으면 그 등급으로 규칙을 만듭니다 */
+      level,
       keywords: [...r.keywords],
       mode: r.mode,
       source: "analysis",
@@ -105,7 +137,7 @@ export default function AnalyzePage() {
         : `이미 있는 규칙에 연결했습니다 — 계약 ${hits}건 적용`);
     }
     return rule;
-  }, [addRule, setApplied, allow, guard]);
+  }, [addRule, setApplied, allow, guard, riskLevel]);
 
   const registerAllRisks = useCallback(() => {
     if (!guard("editSummary")) return;
@@ -411,6 +443,7 @@ export default function AnalyzePage() {
                 <span className="text-[11.5px] font-semibold text-t3">분류 신뢰도</span>
                 <span className="num text-[13px] font-bold text-[var(--accent)]">{ANALYSIS.meta.confidence}%</span>
               </div>
+              <EditSummaryChip ed={ed} />
               <button
                 onClick={() => {
                   if (!guard("copySummary", ledger === "done" ? "confirmed" : "aiGenerated")) return;
@@ -478,8 +511,26 @@ export default function AnalyzePage() {
                     </div>
                   </div>
                   <div className="grid min-w-[260px] flex-1 grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
-                    <InfoRow ico={<ScanText size={13} />} k="계약 유형" v={ANALYSIS.meta.type} />
-                    <InfoRow ico={<FolderTree size={13} />} k="업무 영역" v={`${ANALYSIS.meta.seg} · ${SEG_LABEL[ANALYSIS.meta.seg]}`} />
+                    <EditRow ico={<ScanText size={13} />} k="계약 유형">
+                      <EditableChoice
+                        ed={ed}
+                        k="meta.type"
+                        original={ANALYSIS.meta.type}
+                        options={TYPE_OPTIONS}
+                        compactMark
+                      />
+                    </EditRow>
+                    <EditRow ico={<FolderTree size={13} />} k="업무 영역">
+                      <EditableChoice
+                        ed={ed}
+                        k="meta.seg"
+                        original={ANALYSIS.meta.seg}
+                        options={SEG_OPTIONS}
+                        compactMark
+                      >
+                        {(v) => <span>{v} · {SEG_LABEL[v as Seg] ?? ""}</span>}
+                      </EditableChoice>
+                    </EditRow>
                     <InfoRow ico={<ScanText size={13} />} k="문서 언어" v={ANALYSIS.meta.language} />
                     <InfoRow ico={<ShieldCheck size={13} />} k="준거법" v={ANALYSIS.meta.governing} />
                   </div>
@@ -614,7 +665,14 @@ export default function AnalyzePage() {
                   {tab === "one" && (
                     <div className="flex gap-3 rounded-[12px] border border-[#cfe6eb] bg-[linear-gradient(180deg,#f2fafb,#fff)] p-4">
                       <Quote size={20} className="flex-shrink-0 text-[var(--accent)]" />
-                      <p className="text-[14.5px] font-medium leading-relaxed text-t1">{ANALYSIS.summary1}</p>
+                      <EditableText
+                        ed={ed}
+                        k="summary1"
+                        original={ANALYSIS.summary1}
+                        multiline
+                        className="text-[14.5px] font-medium leading-relaxed text-t1"
+                        inputClass="text-[14px] leading-relaxed text-t1"
+                      />
                     </div>
                   )}
                   {tab === "key" && (
@@ -622,7 +680,15 @@ export default function AnalyzePage() {
                       {ANALYSIS.summary2.map((s, i) => (
                         <li key={i} className="flex gap-3 text-[13.5px] leading-relaxed text-t2">
                           <span className="num mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-md bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-text)]">{i + 1}</span>
-                          {s}
+                          <EditableText
+                            ed={ed}
+                            k={`summary2.${i}`}
+                            original={s}
+                            multiline
+                            className="flex-1 text-[13.5px] leading-relaxed text-t2"
+                            inputClass="text-[13px] leading-relaxed text-t2"
+                            compactMark
+                          />
                         </li>
                       ))}
                     </ul>
@@ -634,9 +700,31 @@ export default function AnalyzePage() {
                           <div className="mb-1.5 flex items-center gap-2">
                             <span className="num text-[12px] font-bold text-[var(--accent)]">{c.no}</span>
                             <span className="text-[13.5px] font-bold text-t1">{c.title}</span>
-                            <Pill tone={RISK_TONE[c.risk as keyof typeof RISK_TONE]} className="ml-auto">{RISK_LABEL[c.risk as keyof typeof RISK_LABEL]}</Pill>
+                            <span className="ml-auto flex items-center gap-1.5">
+                              <EditableChoice
+                                ed={ed}
+                                k={`clause.${c.no}.risk`}
+                                original={c.risk}
+                                options={RISK_LEVEL_OPTIONS}
+                                compactMark
+                              >
+                                {(v) => (
+                                  <Pill tone={RISK_TONE[v as keyof typeof RISK_TONE]}>
+                                    {RISK_LABEL[v as keyof typeof RISK_LABEL]}
+                                  </Pill>
+                                )}
+                              </EditableChoice>
+                            </span>
                           </div>
-                          <p className="text-[12.8px] leading-relaxed text-t2">{c.body}</p>
+                          <EditableText
+                            ed={ed}
+                            k={`clause.${c.no}.body`}
+                            original={c.body}
+                            multiline
+                            className="text-[12.8px] leading-relaxed text-t2"
+                            inputClass="text-[12.5px] leading-relaxed text-t2"
+                            compactMark
+                          />
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {c.tags.map((t) => <Tag key={t} className="text-[10.5px]">#{t}</Tag>)}
                           </div>
@@ -661,7 +749,13 @@ export default function AnalyzePage() {
                       <div key={f.k} className={cn("flex items-start gap-3 border-line-soft px-5 py-3.5", i < ANALYSIS.fields.length - 1 && "border-b", i % 2 === 0 && "sm:border-r")}>
                         <div className="min-w-0 flex-1">
                           <div className="text-[11.5px] font-semibold text-t4">{f.k}</div>
-                          <div className="mt-0.5 text-[13.5px] font-semibold text-t1">{f.v}</div>
+                          <EditableText
+                            ed={ed}
+                            k={`field.${f.k}`}
+                            original={f.v}
+                            className="mt-0.5 text-[13.5px] font-semibold text-t1"
+                            compactMark
+                          />
                         </div>
                         <div className="flex flex-shrink-0 items-center gap-1.5 pt-0.5">
                           <div className="h-[5px] w-9 overflow-hidden rounded-full bg-[#eceef2]">
@@ -737,7 +831,12 @@ export default function AnalyzePage() {
                   <div className="flex flex-col gap-2.5">
                     <div className="flex flex-col gap-2 text-[12.3px]">
                       <InfoRow ico={<ListChecks size={13} />} k="검증된 필드" v={`${ANALYSIS.fields.length}개 전부 확인`} />
-                      <InfoRow ico={<ShieldAlert size={13} />} k="미해소 리스크" v={`고위험 ${critCount}건 · 주의 ${ANALYSIS.risks.length - critCount}건`} warn />
+                      <InfoRow
+                        ico={<ShieldAlert size={13} />}
+                        k="미해소 리스크"
+                        v={`고위험 ${critCount}건 · 주의 ${warnCount}건${clearedCount > 0 ? ` · 표준 처리 ${clearedCount}건` : ""}`}
+                        warn={critCount + warnCount > 0}
+                      />
                       <InfoRow ico={<FolderTree size={13} />} k="저장 위치" v={LEDGER_TARGET.path} />
                     </div>
                     <button
@@ -778,15 +877,41 @@ export default function AnalyzePage() {
                     const reg = registered[r.label];
                     const rule = reg ? rules.find((x) => x.id === reg) : undefined;
                     const hits = rule ? searchRule(rule).length : 0;
+                    const lv = riskLevel(r);
                     return (
-                      <div key={r.label} className={cn("rounded-[11px] border p-3", r.level === "crit" ? "border-[var(--red-line)] bg-[var(--red-soft)]" : "border-[var(--amber-line)] bg-[var(--amber-soft)]")}>
+                      <div
+                        className={cn(
+                          "rounded-[11px] border p-3",
+                          lv === "crit"
+                            ? "border-[var(--red-line)] bg-[var(--red-soft)]"
+                            : lv === "warn"
+                              ? "border-[var(--amber-line)] bg-[var(--amber-soft)]"
+                              : "border-[var(--green-line)] bg-[var(--green-soft)]",
+                        )}
+                        key={r.label}
+                      >
                         <div className="flex items-center gap-3">
-                          <ShieldAlert size={18} className={r.level === "crit" ? "text-[var(--red)]" : "text-[var(--amber)]"} />
+                          <ShieldAlert
+                            size={18}
+                            className={lv === "crit" ? "text-[var(--red)]" : lv === "warn" ? "text-[var(--amber)]" : "text-[var(--green)]"}
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="text-[13px] font-bold text-t1">{r.label}</div>
                             <div className="text-[11.5px] text-t3">{r.note}</div>
                           </div>
-                          <Pill tone={r.level === "crit" ? "crit" : "warn"}>{RISK_LABEL[r.level as keyof typeof RISK_LABEL]}</Pill>
+                          <EditableChoice
+                            ed={ed}
+                            k={`risk.${r.label}.level`}
+                            original={r.level}
+                            options={RISK_LEVEL_OPTIONS}
+                            compactMark
+                          >
+                            {(v) => (
+                              <Pill tone={RISK_TONE[v as keyof typeof RISK_TONE]}>
+                                {RISK_LABEL[v as keyof typeof RISK_LABEL]}
+                              </Pill>
+                            )}
+                          </EditableChoice>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
                           <div className="flex flex-wrap gap-1">
@@ -896,6 +1021,17 @@ export default function AnalyzePage() {
         </div>
       )}
     </>
+  );
+}
+
+/** 편집 가능한 값을 InfoRow 와 같은 모양으로 감싸는 행 */
+function EditRow({ ico, k, children }: { ico: React.ReactNode; k: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 text-[12.5px]">
+      <span className="mt-[3px] flex-shrink-0 text-t4">{ico}</span>
+      <span className="flex-shrink-0 text-t4">{k}</span>
+      <span className="ml-auto text-right font-semibold text-t1">{children}</span>
+    </div>
   );
 }
 
