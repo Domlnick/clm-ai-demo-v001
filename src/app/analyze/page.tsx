@@ -44,6 +44,8 @@ const RISK_LEVEL_OPTIONS = [
   { value: "ok", label: "표준" },
 ];
 const RISK_LABEL = { crit: "고위험", warn: "주의", ok: "표준" };
+/** 마지막 단계 완료(100%)를 보여 주는 시간 — 총 소요는 PIPELINE 합계 그대로 */
+const DONE_HOLD_MS = 320;
 /* 조항 카드 배경 — 플레이북 대비 차이 카드와 같은 색 규칙 */
 const RISK_CARD = {
   crit: "border-[var(--red-line)] bg-[var(--red-soft)]",
@@ -128,18 +130,16 @@ export default function AnalyzePage() {
     let at = 0;
     PIPELINE.forEach((p, i) => {
       at += p.ms;
-      const when = at;
       const last = i === PIPELINE.length - 1;
-      timers.current.push(
-        setTimeout(() => {
-          setStep(i + 1);
-          if (last) setPhase("done");
-        }, when),
-      );
+      /* 마지막 단계는 조금 일찍 끝내 100%를 잠깐 보여 준 뒤 결과로 넘어갑니다 */
+      const when = last ? at - DONE_HOLD_MS : at;
+      timers.current.push(setTimeout(() => setStep(i + 1), when));
+      if (last) timers.current.push(setTimeout(() => setPhase("done"), at));
     });
   }, []);
 
-  const progress = Math.round((Math.min(step + 1, PIPELINE.length) / PIPELINE.length) * 100);
+  /* 끝난 단계만 센다 — 첫 단계 처리 중에는 0%, 단계마다 25%씩 */
+  const progress = Math.round((Math.min(step, PIPELINE.length) / PIPELINE.length) * 100);
 
   const reset = () => {
     timers.current.forEach(clearTimeout);
