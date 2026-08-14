@@ -25,40 +25,358 @@ export const CONTRACT_TYPES = [
   { id: "jv", name: "JV·M&A", seg: "S3" as Seg, count: 31 },
 ];
 
-/* ---------- 대시보드 KPI ---------- */
-export const KPIS = [
-  { label: "인덱싱 완료 계약", value: "248,391", unit: "건", delta: "+1,204", up: true, tone: "accent", spark: [22, 30, 28, 40, 44, 52, 60] },
-  { label: "AI 자동 분류 정확도", value: "92.4", unit: "%", delta: "+1.8%p", up: true, tone: "ok", spark: [70, 74, 78, 80, 85, 89, 92] },
-  { label: "만료·갱신 임박(90일)", value: "137", unit: "건", delta: "+12", up: false, tone: "warn", spark: [8, 10, 9, 12, 11, 13, 14] },
-  { label: "고위험 조항 노출", value: "43", unit: "건", delta: "-6", up: true, tone: "crit", spark: [12, 11, 10, 9, 8, 7, 5] },
+/* ============================================================
+   대시보드
+   ------------------------------------------------------------
+   기획서 F-LDG-005(대시보드·집계)를 따라 구성했습니다.
+
+     기본 지표      총 건수 · 금액 합계 · 만료 임박
+     리스크 지표    불리 조항 보유 수 · 특정 조항 부재 수
+     품질 지표      미확정 필드 비율 · 검토 대기 건수
+     뷰             조직·부문별, 기간 필터
+
+   같은 스펙의 예외 규칙 — "미확정 데이터가 포함된 집계는 그 비율을
+   함께 표시한다" — 을 지키려고 모든 집계에 확정/미확정을 병기합니다.
+   숫자는 프로토타입용 가상값이지만 부문 합계가 전사 합계와 맞도록
+   맞춰두었습니다.
+   ============================================================ */
+
+/* ---------- 부문 · 기간 필터 ---------- */
+export type DeptId = "all" | "purchase" | "plant" | "sales" | "admin";
+
+export const DEPTS: { id: DeptId; label: string }[] = [
+  { id: "all", label: "전사" },
+  { id: "purchase", label: "구매실" },
+  { id: "plant", label: "생산본부" },
+  { id: "sales", label: "영업본부" },
+  { id: "admin", label: "관리본부" },
 ];
 
-/* ---------- 유형 분포 (도넛/바) ---------- */
-export const TYPE_DIST = [
-  { name: "주유소 임대차", seg: "S1" as Seg, pct: 24, color: "#0f6e82" },
-  { name: "일반 구매", seg: "S2" as Seg, pct: 19, color: "#1a9ab0" },
-  { name: "용역·유지보수", seg: "S2" as Seg, pct: 21, color: "#3bb4c7" },
-  { name: "위탁운영·폴사인", seg: "S1" as Seg, pct: 17, color: "#6dccdb" },
-  { name: "NDA·기타", seg: "S2" as Seg, pct: 15, color: "#a9dfe8" },
-  { name: "원유·용선·EPC", seg: "S3" as Seg, pct: 4, color: "#c8892b" },
+/** 로그인 계정의 dept 문자열 → 필터 id. 매칭이 없으면 부문 고정이 불가능합니다 */
+export const DEPT_BY_NAME: Record<string, DeptId> = {
+  구매실: "purchase",
+  생산본부: "plant",
+  영업본부: "sales",
+  관리본부: "admin",
+};
+
+export type PeriodId = "30d" | "quarter" | "year";
+
+/** 기간은 누적 자산(총 건수·금액)이 아니라 증감 기준을 바꿉니다 */
+export const PERIODS: { id: PeriodId; label: string; deltaLabel: string; factor: number }[] = [
+  { id: "30d", label: "최근 30일", deltaLabel: "전월 대비", factor: 1 },
+  { id: "quarter", label: "분기", deltaLabel: "전분기 대비", factor: 2.8 },
+  { id: "year", label: "연간", deltaLabel: "전년 대비", factor: 9.4 },
+];
+
+/* ---------- KPI ---------- */
+export type KpiTone = "accent" | "ok" | "warn" | "crit";
+
+export type Kpi = {
+  key: string;
+  label: string;
+  value: string;
+  unit: string;
+  /** 확정/미확정 구간을 알리는 캡션 — F-LDG-005 예외 규칙 */
+  caption: string;
+  delta: string;
+  up: boolean;
+  tone: KpiTone;
+  spark: number[];
+  /** 진행률 바를 그릴 때만 사용 */
+  pct?: number;
+  href?: string;
+};
+
+type DeptNumbers = {
+  done: number;
+  total: number;
+  fieldPct: number;
+  fieldOpen: number;
+  queue: number;
+  amount: string;
+  gained: number;
+};
+
+/* 부문 합계 = 전사 합계.
+   done 71,204+58,930+84,610+33,647 = 248,391
+   total 76,800+62,100+88,300+35,200 = 262,400
+   fieldOpen 11,930+6,740+8,320+5,857 = 32,847
+   queue 2+2+1+1 = 6 (사이드바 '내 검토함' 뱃지와 같은 값)
+   gained 412+288+389+115 = 1,204 */
+const DEPT_NUMBERS: Record<DeptId, DeptNumbers> = {
+  all: { done: 248391, total: 262400, fieldPct: 87.3, fieldOpen: 32847, queue: 6, amount: "4.7조", gained: 1204 },
+  purchase: { done: 71204, total: 76800, fieldPct: 84.1, fieldOpen: 11930, queue: 2, amount: "1.9조", gained: 412 },
+  plant: { done: 58930, total: 62100, fieldPct: 88.6, fieldOpen: 6740, queue: 2, amount: "1.3조", gained: 288 },
+  sales: { done: 84610, total: 88300, fieldPct: 90.2, fieldOpen: 8320, queue: 1, amount: "0.9조", gained: 389 },
+  admin: { done: 33647, total: 35200, fieldPct: 85.4, fieldOpen: 5857, queue: 1, amount: "0.6조", gained: 115 },
+};
+
+const n = (v: number) => v.toLocaleString("ko-KR");
+
+export function kpisFor(dept: DeptId, period: PeriodId): Kpi[] {
+  const d = DEPT_NUMBERS[dept];
+  const p = PERIODS.find((x) => x.id === period) ?? PERIODS[0];
+  const gained = Math.round(d.gained * p.factor);
+  const pct = (d.done / d.total) * 100;
+
+  return [
+    {
+      key: "digitized",
+      label: "데이터화 완료",
+      value: n(d.done),
+      unit: `/ ${n(d.total)}건`,
+      caption: `미처리 ${n(d.total - d.done)}건`,
+      delta: `+${n(gained)}`,
+      up: true,
+      tone: "accent",
+      spark: [22, 30, 28, 40, 44, 52, 60],
+      pct,
+    },
+    {
+      key: "field",
+      label: "대장 필드 확정률",
+      value: d.fieldPct.toFixed(1),
+      unit: "%",
+      caption: `미확정 ${(100 - d.fieldPct).toFixed(1)}% · ${n(d.fieldOpen)}개 필드`,
+      delta: "+2.1%p",
+      up: true,
+      tone: "ok",
+      spark: [70, 74, 78, 80, 85, 86, 87],
+      pct: d.fieldPct,
+    },
+    {
+      key: "queue",
+      label: "검토 대기",
+      value: String(d.queue),
+      unit: "건",
+      caption: "분류 신뢰도 90% 미만",
+      delta: "+1",
+      up: false,
+      tone: "warn",
+      spark: [3, 4, 4, 5, 4, 6, 6],
+      href: "/contracts",
+    },
+    {
+      key: "amount",
+      label: "계약금액 총계",
+      value: d.amount,
+      unit: "원",
+      caption: "미확정 금액 필드 제외",
+      delta: `+${(0.12 * p.factor).toFixed(2)}조`,
+      up: true,
+      tone: "crit",
+      spark: [30, 33, 38, 41, 45, 47, 52],
+    },
+  ];
+}
+
+/* ---------- 조항 노출 ---------- */
+/* 기획서 P1(조항 검색 불가) · P5(리스크 집계 불가)에 답하는 블록.
+   '보유'는 risk.ts 의 SEED_RULES 와 같은 축이고,
+   '부재'는 F-LDG-005 가 요구하는 "특정 조항 부재 계약 수" 입니다.
+   조항이 있는지 없는지는 육안 검토로만 확인할 수 있던 항목이라
+   대장이 필드화됐을 때 가장 크게 달라지는 지점입니다. */
+export type ClauseRow = {
+  id: string;
+  kind: "present" | "absent";
+  title: string;
+  desc: string;
+  level: "crit" | "warn";
+  /** 전사 건수 */
+  total: number;
+  /** 그중 사람이 확정한 건수. 나머지는 미확정 */
+  confirmed: number;
+  /** S1 · S2 · S3 비중(%) — 부문을 좁혀도 비중은 유지합니다 */
+  segShare: [number, number, number];
+  byDept: Record<Exclude<DeptId, "all">, number>;
+  /** risk.ts 의 규칙 id — 행을 누르면 해당 규칙으로 이동 */
+  ruleId?: string;
+  action: string;
+};
+
+export const CLAUSE_EXPOSURE: ClauseRow[] = [
+  {
+    id: "ce-liab100",
+    kind: "present",
+    title: "손해배상 한도 표준 초과",
+    desc: "한도가 계약금액의 100% — 사내 표준 30%",
+    level: "crit",
+    total: 43,
+    confirmed: 37,
+    segShare: [12, 64, 24],
+    byDept: { purchase: 19, plant: 14, sales: 6, admin: 4 },
+    ruleId: "r-liab100",
+    action: "재협상 검토",
+  },
+  {
+    id: "ce-liab-none",
+    kind: "present",
+    title: "손해배상 한도 미설정 (무한책임)",
+    desc: "한도를 정하지 않아 노출액이 무제한",
+    level: "crit",
+    total: 11,
+    confirmed: 9,
+    segShare: [9, 73, 18],
+    byDept: { purchase: 5, plant: 3, sales: 2, admin: 1 },
+    ruleId: "r-liab-none",
+    action: "즉시 조치",
+  },
+  {
+    id: "ce-autorenew",
+    kind: "present",
+    title: "무통지 자동갱신",
+    desc: "통지 없이 자동 연장 — 놓치면 기간 연장",
+    level: "warn",
+    total: 28,
+    confirmed: 24,
+    segShare: [61, 32, 7],
+    byDept: { purchase: 6, plant: 5, sales: 13, admin: 4 },
+    ruleId: "r-autorenew",
+    action: "통지기한 등록",
+  },
+  {
+    id: "ce-delaycap",
+    kind: "present",
+    title: "지연배상 상한 미설정",
+    desc: "요율만 있고 총액 상한이 없음",
+    level: "warn",
+    total: 19,
+    confirmed: 15,
+    segShare: [16, 68, 16],
+    byDept: { purchase: 9, plant: 7, sales: 2, admin: 1 },
+    ruleId: "r-delaycap",
+    action: "플레이북 반영",
+  },
+  {
+    id: "ce-no-nda",
+    kind: "absent",
+    title: "비밀유지 조항 없음",
+    desc: "기술·거래 정보를 다루는데 비밀유지 조항 부재",
+    level: "crit",
+    total: 34,
+    confirmed: 26,
+    segShare: [47, 44, 9],
+    byDept: { purchase: 12, plant: 8, sales: 10, admin: 4 },
+    action: "추가 협의",
+  },
+  {
+    id: "ce-no-law",
+    kind: "absent",
+    title: "준거법 미기재",
+    desc: "분쟁 시 적용 법률을 특정할 수 없음",
+    level: "warn",
+    total: 22,
+    confirmed: 16,
+    segShare: [55, 36, 9],
+    byDept: { purchase: 7, plant: 5, sales: 7, admin: 3 },
+    action: "변경계약 검토",
+  },
+  {
+    id: "ce-no-cap",
+    kind: "absent",
+    title: "손해배상 상한 조항 자체 없음",
+    desc: "배상 조항은 있으나 상한 규정이 누락",
+    level: "crit",
+    total: 17,
+    confirmed: 12,
+    segShare: [24, 59, 17],
+    byDept: { purchase: 7, plant: 6, sales: 3, admin: 1 },
+    action: "즉시 조치",
+  },
+];
+
+/* ---------- 만료·갱신 타임라인 ---------- */
+/* 구간은 기획서 F-LDG-004 의 알림 시점(120/90/60/30/7일 전)과 같습니다.
+   자동갱신은 '통지기한', 재계약은 '만료일'이 기준이라 성격이 다릅니다.
+   cid 가 있는 항목은 계약 대장 코퍼스에 실재하는 계약입니다. */
+export type ExpiringItem = {
+  id: string;
+  title: string;
+  party: string;
+  dept: Exclude<DeptId, "all">;
+  /** 조치 기한까지 남은 일수 */
+  dday: number;
+  kind: "notice" | "expiry";
+  renew: string;
+  amount: string;
+  /** 마커 크기 기준 — 억 단위 환산 */
+  weight: number;
+  risk: "crit" | "warn" | "ok";
+  note: string;
+  /** 계약 대장 코퍼스 id. 없으면 대장 목록으로 보냅니다 */
+  cid?: string;
+};
+
+export const EXPIRING_TOTAL = 137;
+
+export const EXPIRING: ExpiringItem[] = [
+  {
+    id: "x1", title: "울산 물류창고 임대차", party: "KCTC", dept: "admin",
+    dday: 10, kind: "notice", renew: "자동갱신", amount: "3.8억/년", weight: 3.8, risk: "crit",
+    note: "미통지 시 동일 조건으로 1년 자동연장", cid: "C-24801",
+  },
+  {
+    id: "x2", title: "본사 사옥 청소 용역", party: "에스원", dept: "admin",
+    dday: 18, kind: "expiry", renew: "재계약 협의", amount: "2.1억", weight: 2.1, risk: "crit",
+    note: "재계약 단가 협의 미착수",
+  },
+  {
+    id: "x3", title: "OO주유소 부지 임대차", party: "대성에너지", dept: "sales",
+    dday: 27, kind: "notice", renew: "자동갱신", amount: "6.4억/년", weight: 6.4, risk: "crit",
+    note: "갱신 조건 재검토 필요 — 임대료 인상 요구", cid: "C-24816",
+  },
+  {
+    id: "x4", title: "충전소 브랜드 폴사인 사용", party: "지에스칼텍스판매", dept: "sales",
+    dday: 38, kind: "notice", renew: "자동갱신", amount: "0.9억/년", weight: 0.9, risk: "warn",
+    note: "표준 조건 · 자동처리 가능", cid: "C-24813",
+  },
+  {
+    id: "x5", title: "설비 예방정비 위탁 용역", party: "GS이엔알", dept: "plant",
+    dday: 46, kind: "notice", renew: "자동갱신", amount: "12.0억", weight: 12, risk: "warn",
+    note: "SLA 감액률 조정 협의 중", cid: "C-24810",
+  },
+  {
+    id: "x6", title: "정보보안 관제 용역", party: "안랩", dept: "admin",
+    dday: 63, kind: "expiry", renew: "재계약 협의", amount: "7.2억", weight: 7.2, risk: "warn",
+    note: "SLA 조건 재검토 권고", cid: "C-22140",
+  },
+  {
+    id: "x7", title: "여수공장 촉매 운반 물류계약", party: "한진", dept: "plant",
+    dday: 71, kind: "expiry", renew: "재계약 협의", amount: "5.4억", weight: 5.4, risk: "warn",
+    note: "운송 단가 상승분 반영 필요",
+  },
+  {
+    id: "x8", title: "IT 인프라 유지보수 기술용역", party: "GS ITM", dept: "admin",
+    dday: 79, kind: "expiry", renew: "재계약 협의", amount: "9.6억", weight: 9.6, risk: "warn",
+    note: "변경계약 진행 중 — 만료일 확인 필요", cid: "C-24756",
+  },
+  {
+    id: "x9", title: "촉매제 연간 단가계약", party: "BASF코리아", dept: "purchase",
+    dday: 89, kind: "expiry", renew: "재계약 협의", amount: "24.0억", weight: 24, risk: "warn",
+    note: "가격 재협상 필요 · 단가 상승 리스크", cid: "C-23990",
+  },
+  {
+    id: "x10", title: "사택 임대차 (3건 묶음)", party: "롯데자산개발", dept: "admin",
+    dday: 104, kind: "expiry", renew: "재계약 협의", amount: "4.2억/년", weight: 4.2, risk: "ok",
+    note: "표준 조건 · 자동처리 가능",
+  },
+  {
+    id: "x11", title: "윤활유 원료 연간 공급계약", party: "SK엔무브", dept: "purchase",
+    dday: 117, kind: "notice", renew: "자동갱신", amount: "31.0억", weight: 31, risk: "ok",
+    note: "표준 조건 · 통지기한 등록 완료",
+  },
 ];
 
 /* ---------- 최근 처리 계약 ---------- */
+/* id 는 모두 계약 대장 코퍼스(contracts.ts)에 실재하는 계약입니다 */
 export const RECENT = [
-  { id: "C-24817", title: "여수 국가산단 촉매 공급계약", type: "일반 구매", seg: "S2" as Seg, party: "한화솔루션", amount: "38.2억", status: "요약완료", ft: "pdf", when: "12분 전", conf: 96 },
-  { id: "C-24816", title: "OO주유소 부지 임대차계약서(갱신)", type: "주유소 임대차", seg: "S1" as Seg, party: "대성에너지", amount: "6.4억/년", status: "검토필요", ft: "hwp", when: "38분 전", conf: 88 },
-  { id: "C-24815", title: "설비 예방정비 위탁 용역계약", type: "유지보수", seg: "S2" as Seg, party: "GS이엔알", amount: "12.0억", status: "요약완료", ft: "pdf", when: "1시간 전", conf: 94 },
-  { id: "C-24814", title: "Crude Oil Term Supply Agreement", type: "원유 장기도입", seg: "S3" as Seg, party: "Saudi Aramco", amount: "USD 620M", status: "요약완료", ft: "pdf", when: "2시간 전", conf: 81 },
-  { id: "C-24813", title: "충전소 브랜드 폴사인 사용계약", type: "폴사인·상표사용", seg: "S1" as Seg, party: "지에스칼텍스판매", amount: "0.9억/년", status: "요약완료", ft: "docx", when: "3시간 전", conf: 97 },
-  { id: "C-24812", title: "IT 인프라 유지보수 기술용역", type: "용역", seg: "S2" as Seg, party: "GS ITM", amount: "9.6억", status: "검토필요", ft: "hwp", when: "4시간 전", conf: 85 },
-];
-
-/* ---------- 만료·갱신 임박 ---------- */
-export const EXPIRING = [
-  { title: "울산 물류창고 임대차", party: "KCTC", dday: 14, renew: "자동갱신", risk: "crit", note: "통지기한 D-14 — 미통지 시 1년 자동연장" },
-  { title: "촉매제 연간 단가계약", party: "BASF코리아", dday: 41, renew: "재계약 협의", risk: "warn", note: "가격 재협상 필요 · 단가 상승 리스크" },
-  { title: "정보보안 관제 용역", party: "안랩", dday: 67, renew: "자동갱신", risk: "warn", note: "SLA 조건 재검토 권고" },
-  { title: "사택 임대차(3건)", party: "롯데자산개발", dday: 88, renew: "재계약 협의", risk: "ok", note: "표준 조건 · 자동처리 가능" },
+  { id: "C-24817", title: "여수2공장 촉매 공급계약 (최종본 v3)", type: "일반 구매", seg: "S2" as Seg, party: "한화솔루션", dept: "purchase" as DeptId, amount: "38.2억", status: "요약완료", ft: "pdf", when: "12분 전", conf: 96 },
+  { id: "C-24816", title: "OO주유소 부지 임대차계약서 (갱신)", type: "주유소 임대차", seg: "S1" as Seg, party: "대성에너지", dept: "sales" as DeptId, amount: "6.4억/년", status: "검토필요", ft: "hwp", when: "38분 전", conf: 88 },
+  { id: "C-24810", title: "설비 예방정비 위탁 용역계약", type: "유지보수", seg: "S2" as Seg, party: "GS이엔알", dept: "plant" as DeptId, amount: "12.0억", status: "요약완료", ft: "pdf", when: "1시간 전", conf: 94 },
+  { id: "C-24814", title: "Crude Oil Term Supply Agreement", type: "원유 장기도입", seg: "S3" as Seg, party: "Saudi Aramco", dept: "purchase" as DeptId, amount: "USD 620M", status: "요약완료", ft: "pdf", when: "2시간 전", conf: 81 },
+  { id: "C-24813", title: "충전소 브랜드 폴사인 사용계약", type: "폴사인·상표사용", seg: "S1" as Seg, party: "지에스칼텍스판매", dept: "sales" as DeptId, amount: "0.9억/년", status: "요약완료", ft: "docx", when: "3시간 전", conf: 97 },
+  { id: "C-24756", title: "IT 인프라 유지보수 기술용역", type: "용역", seg: "S2" as Seg, party: "GS ITM", dept: "admin" as DeptId, amount: "9.6억", status: "검토필요", ft: "hwp", when: "4시간 전", conf: 85 },
 ];
 
 /* ---------- 파이프라인 스테이지 ---------- */
