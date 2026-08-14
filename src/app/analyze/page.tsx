@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import Link from "next/link";
 import {
   UploadCloud, Sparkles, ListChecks,
   CheckCircle2, Loader2, RotateCcw, Download, ArrowRight, ScanText, Quote,
@@ -666,9 +665,12 @@ export default function AnalyzePage() {
                   bodyClass="p-0"
                   right={
                     activePb && (
-                      <Link href={`/playbook/${activePb.id}`} className="flex h-[30px] items-center gap-1 rounded-[8px] border border-line px-2.5 text-[11.5px] font-bold text-t2 transition hover:bg-surface-2">
+                      <button
+                        onClick={() => toast("협상 플레이북은 프로토타입 범위 밖입니다")}
+                        className="flex h-[30px] items-center gap-1 rounded-[8px] border border-line px-2.5 text-[11.5px] font-bold text-t2 transition hover:bg-surface-2"
+                      >
                         플레이북 <ArrowRight size={12} />
-                      </Link>
+                      </button>
                     )
                   }
                 >

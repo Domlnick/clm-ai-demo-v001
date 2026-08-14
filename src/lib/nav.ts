@@ -36,17 +36,17 @@ export const NAV: NavGroup[] = [
     group: "계약 AI",
     items: [
       { id: "analyze", label: "계약서 분석·요약", icon: ScanText, href: "/analyze" },
-      { id: "search", label: "계약서 검색", icon: Search, href: "/search" },
-      { id: "draft", label: "초안 작성 어시스트", icon: PenLine, href: "/draft" },
+      { id: "search", label: "계약서 검색", icon: Search },
+      { id: "draft", label: "초안 작성 어시스트", icon: PenLine },
     ],
   },
   {
     group: "계약 자산",
     items: [
-      { id: "ledger", label: "계약 대장", icon: BookText, href: "/contracts" },
-      { id: "playbook", label: "협상 플레이북", icon: Handshake, href: "/playbook", warn: true },
+      { id: "ledger", label: "계약 대장", icon: BookText },
+      { id: "playbook", label: "협상 플레이북", icon: Handshake, warn: true },
       { id: "renewal", label: "만료·갱신 관리", icon: BellRing, badge: "3", warn: true },
-      { id: "risk", label: "리스크 관리", icon: ShieldAlert, href: "/risk" },
+      { id: "risk", label: "리스크 관리", icon: ShieldAlert },
       { id: "similar", label: "유사 계약 탐색", icon: Compass },
     ],
   },

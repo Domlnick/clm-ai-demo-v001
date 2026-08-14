@@ -15,13 +15,14 @@ import {
 } from "lucide-react";
 import { BrandLockup } from "@/components/brand";
 import { NAV, type NavItem } from "@/lib/nav";
+import { blockedLabel } from "@/lib/blocked-routes";
 import { openRequests, reviewState } from "@/lib/playbooks";
 import { useAuth } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { useStore } from "@/lib/store";
 import { UserMenu } from "@/components/user-menu";
 import { toast } from "@/components/toast";
-import { cn } from "@/lib/utils";
+import { cn, topicParticle } from "@/lib/utils";
 
 const PAGE_META: Record<string, { title: string; crumb: string }> = {
   "/": { title: "대시보드", crumb: "워크스페이스" },
@@ -64,6 +65,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setCollapsed(localStorage.getItem("legalai_sb_collapsed") === "1");
+  }, []);
+
+  /* 프로토타입 범위 밖 화면으로 가는 링크는 이동시키지 않고 안내만 합니다.
+     대시보드 카드·본문 링크를 각각 고치지 않고 한 곳에서 막습니다. */
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.("a");
+      const href = a?.getAttribute("href");
+      if (!href) return;
+      const label = blockedLabel(href);
+      if (!label) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toast(`${label}${topicParticle(label)} 프로토타입 범위 밖입니다`);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
   }, []);
 
   const toggleCollapse = () => {
@@ -155,7 +173,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* search */}
           <button
-            onClick={() => toast("전역 검색은 프로토타입 범위 밖입니다 — 좌측 '계약서 검색'을 이용해 주세요")}
+            onClick={() => toast("전역 검색은 프로토타입 범위 밖입니다")}
             className={cn(
               "mx-1 mt-3.5 mb-1.5 flex items-center gap-2.5 rounded-[11px] border border-line bg-surface px-3 py-2.5 text-[13px] text-t4 transition hover:border-line-strong",
               collapsed && "mx-auto w-12 justify-center px-0",
@@ -213,7 +231,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex-1" />
             <button
-              onClick={() => toast('자연어 질의는 "계약서 검색" 페이지에서 시연할 수 있어요')}
+              onClick={() => toast("자연어 질의는 프로토타입 범위 밖입니다")}
               className="hidden h-[42px] max-w-[440px] flex-1 items-center gap-2.5 rounded-full border border-transparent bg-surface-3 px-4 text-[13.5px] text-t3 transition hover:border-line hover:bg-surface md:flex"
             >
               <Sparkles size={17} className="flex-shrink-0 text-[var(--accent)]" />
@@ -284,7 +302,7 @@ function NavLink({ item, active, collapsed }: { item: NavItem; active: boolean; 
   }
   return (
     <button
-      onClick={() => toast("해당 화면은 프로토타입 범위 밖이에요 — 연결된 3개 화면을 둘러보세요")}
+      onClick={() => toast(`${item.label}${topicParticle(item.label)} 프로토타입 범위 밖입니다`)}
       className={cn(cls, "w-full text-left")}
       title={collapsed ? item.label : undefined}
     >
