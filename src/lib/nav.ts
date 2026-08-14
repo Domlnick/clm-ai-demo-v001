@@ -3,7 +3,6 @@ import {
   Inbox,
   ScanText,
   Search,
-  PenLine,
   BookText,
   BellRing,
   ShieldAlert,
@@ -37,7 +36,6 @@ export const NAV: NavGroup[] = [
     items: [
       { id: "analyze", label: "계약서 분석·요약", icon: ScanText, href: "/analyze" },
       { id: "search", label: "계약서 검색", icon: Search },
-      { id: "draft", label: "초안 작성 어시스트", icon: PenLine },
     ],
   },
   {
