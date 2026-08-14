@@ -173,21 +173,64 @@ export function EditableText({
       },
       placeholder,
       className: cn(
-        "w-full rounded-[8px] border border-[var(--accent)] bg-surface px-2 py-1 outline-none ring-[3px] ring-[var(--accent-soft)]",
+        "w-full min-w-0 flex-1 rounded-[8px] border border-[var(--accent)] bg-surface px-2.5 py-1.5 outline-none ring-[3px] ring-[var(--accent-soft)]",
+        multiline && "min-h-[120px] resize-y leading-relaxed",
         inputClass ?? className,
       ),
     };
+    /* 글자 수에 맞춰 높이를 잡습니다 — 네 줄 이상, 열두 줄까지 */
+    const rows = Math.min(12, Math.max(4, Math.ceil(draft.length / 42)));
+
+    const actions = (
+      <>
+        <button
+          onClick={commit}
+          title="저장 (Enter)"
+          className="flex h-7 items-center gap-1 rounded-[7px] bg-[var(--accent)] px-2.5 text-[11.5px] font-bold text-white transition hover:bg-[var(--accent-600)]"
+        >
+          <Check size={13} /> 저장
+        </button>
+        <button
+          onMouseDown={cancel}
+          onClick={cancel}
+          title="취소 (Esc)"
+          className="flex h-7 items-center gap-1 rounded-[7px] border border-line px-2.5 text-[11.5px] font-semibold text-t3 transition hover:bg-surface-2"
+        >
+          <X size={13} /> 취소
+        </button>
+      </>
+    );
+
+    /* 여러 줄은 상위 영역 폭을 전부 쓰고 버튼을 아래로 내립니다 */
+    if (multiline) {
+      return (
+        <span className="flex w-full min-w-0 flex-1 flex-col gap-1.5">
+          <textarea {...shared} ref={box as React.Ref<HTMLTextAreaElement>} rows={rows} />
+          <span className="flex items-center gap-1.5">
+            <span className="num flex-1 text-[10.5px] text-t4">⌘Enter 저장 · Esc 취소</span>
+            {actions}
+          </span>
+        </span>
+      );
+    }
+
+    /* 한 줄 입력은 좁은 칸에도 들어가야 해서 버튼을 아이콘만 둡니다 */
     return (
-      <span className="flex items-start gap-1.5">
-        {multiline ? (
-          <textarea {...shared} ref={box as React.Ref<HTMLTextAreaElement>} rows={3} />
-        ) : (
-          <input {...shared} ref={box as React.Ref<HTMLInputElement>} />
-        )}
-        <button onClick={commit} title="저장 (Enter)" className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[6px] bg-[var(--accent)] text-white transition hover:bg-[var(--accent-600)]">
+      <span className="flex w-full min-w-0 flex-1 items-center gap-1">
+        <input {...shared} ref={box as React.Ref<HTMLInputElement>} />
+        <button
+          onClick={commit}
+          title="저장 (Enter)"
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[7px] bg-[var(--accent)] text-white transition hover:bg-[var(--accent-600)]"
+        >
           <Check size={13} />
         </button>
-        <button onMouseDown={cancel} onClick={cancel} title="취소 (Esc)" className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[6px] border border-line text-t3 transition hover:bg-surface-2">
+        <button
+          onMouseDown={cancel}
+          onClick={cancel}
+          title="취소 (Esc)"
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[7px] border border-line text-t3 transition hover:bg-surface-2"
+        >
           <X size={13} />
         </button>
       </span>
@@ -195,7 +238,7 @@ export function EditableText({
   }
 
   return (
-    <span className={cn("group/edit inline-flex flex-wrap items-center gap-1.5", className)}>
+    <span className={cn("group/edit flex flex-wrap items-center gap-1.5", className)}>
       <span>{current || <span className="text-t4">{placeholder ?? "비어 있음"}</span>}</span>
       <button
         onClick={start}
