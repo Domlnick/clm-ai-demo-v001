@@ -60,7 +60,7 @@ export default function AnalyzePage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [step, setStep] = useState(0);
   const [drag, setDrag] = useState(false);
-  const [tab, setTab] = useState<"one" | "key" | "clause">("one");
+  const [tab, setTab] = useState<"key" | "clause">("key");
   const [ledger, setLedger] = useState<Ledger>("idle");
   const [ledgerStep, setLedgerStep] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -145,7 +145,7 @@ export default function AnalyzePage() {
     timers.current.forEach(clearTimeout);
     setPhase("idle");
     setStep(0);
-    setTab("one");
+    setTab("key");
     setLedger("idle");
     setLedgerStep(0);
   };
@@ -523,12 +523,11 @@ export default function AnalyzePage() {
                   </span>
                 }
                 icon={<Sparkles size={17} className="text-[var(--accent)]" />}
-                sub="한줄 → 핵심 → 조항별로 깊이를 조절해 읽고, 추출된 대장 필드로 근거를 확인하세요"
+                sub="한줄 → 핵심 → 대장 필드 순서로 읽고, 조항 단위 확인은 조항별 탭에서"
                 bodyClass="p-0"
                 right={
                   <div className="flex rounded-[9px] bg-surface-3 p-[3px]">
                     {[
-                      { k: "one", l: "한줄" },
                       { k: "key", l: "핵심" },
                       { k: "clause", l: "조항별" },
                     ].map((t) => (
@@ -539,116 +538,124 @@ export default function AnalyzePage() {
                   </div>
                 }
               >
-                <div className="p-5">
-                  {tab === "one" && (
-                    <div className="flex gap-3 rounded-[12px] border border-[#cfe6eb] bg-[linear-gradient(180deg,#f2fafb,#fff)] p-4">
-                      <Quote size={20} className="flex-shrink-0 text-[var(--accent)]" />
-                      <EditableText
-                        ed={ed}
-                        k="summary1"
-                        original={ANALYSIS.summary1}
-                        multiline
-                        className="text-[14.5px] font-medium leading-relaxed text-t1"
-                        inputClass="text-[14px] leading-relaxed text-t1"
-                      />
-                    </div>
-                  )}
+                <div>
                   {tab === "key" && (
-                    <ul className="flex flex-col gap-2.5">
-                      {ANALYSIS.summary2.map((s, i) => (
-                        <li key={i} className="flex gap-3 text-[13.5px] leading-relaxed text-t2">
-                          <span className="num mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-md bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-text)]">{i + 1}</span>
+                    <>
+                      <div className="flex flex-col gap-4 p-5">
+                        {/* 한줄 요약 */}
+                        <div className="flex gap-3 rounded-[12px] border border-[#cfe6eb] bg-[linear-gradient(180deg,#f2fafb,#fff)] p-4">
+                          <Quote size={20} className="flex-shrink-0 text-[var(--accent)]" />
                           <EditableText
                             ed={ed}
-                            k={`summary2.${i}`}
-                            original={s}
+                            k="summary1"
+                            original={ANALYSIS.summary1}
                             multiline
-                            className="flex-1 text-[13.5px] leading-relaxed text-t2"
-                            inputClass="text-[13px] leading-relaxed text-t2"
-                            compactMark
+                            className="text-[14.5px] font-medium leading-relaxed text-t1"
+                            inputClass="text-[14px] leading-relaxed text-t1"
                           />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {tab === "clause" && (
-                    <div className="flex flex-col gap-2.5">
-                      {ANALYSIS.clauses.map((c) => {
-                        const lv = ed.value(`clause.${c.no}.risk`, c.risk) as keyof typeof RISK_CARD;
-                        return (
-                        <div key={c.no} className={cn("rounded-[12px] border p-3.5", RISK_CARD[lv] ?? RISK_CARD.ok)}>
-                          <div className="mb-1.5 flex items-center gap-2">
-                            <span className="num text-[12px] font-bold text-[var(--accent)]">{c.no}</span>
-                            <span className="text-[13.5px] font-bold text-t1">{c.title}</span>
-                            <span className="ml-auto flex items-center gap-1.5">
-                              <EditableChoice
-                                ed={ed}
-                                k={`clause.${c.no}.risk`}
-                                original={c.risk}
-                                options={RISK_LEVEL_OPTIONS}
-                                compactMark
-                              >
-                                {(v) => (
-                                  <Pill tone={RISK_TONE[v as keyof typeof RISK_TONE]}>
-                                    {RISK_LABEL[v as keyof typeof RISK_LABEL]}
-                                  </Pill>
-                                )}
-                              </EditableChoice>
-                            </span>
-                          </div>
-                          <EditableText
-                            ed={ed}
-                            k={`clause.${c.no}.body`}
-                            original={c.body}
-                            multiline
-                            className="text-[12.8px] leading-relaxed text-t2"
-                            inputClass="text-[12.5px] leading-relaxed text-t2"
-                            compactMark
-                          />
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {c.tags.map((t) => (
-                              <Tag key={t} className={cn("text-[10.5px]", RISK_TAG[lv] ?? RISK_TAG.ok)}>#{t}</Tag>
-                            ))}
-                          </div>
                         </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
 
-                {/* 추출된 대장 필드 — 요약의 근거 데이터 */}
-                <div className="border-t border-line-soft">
-                  <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-5 py-2.5">
-                    <ListChecks size={14} className="text-[var(--accent)]" />
-                    <span className="text-[12.5px] font-bold text-t1">추출된 계약 대장 필드</span>
-                    <span className="num rounded-md bg-surface px-1.5 py-px text-[10.5px] font-bold text-t3">
-                      {ANALYSIS.fields.length}개
-                    </span>
-                    <span className="ml-auto text-[11px] text-t4">근거 위치 확인 · 검증 후 대장 반영</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2">
-                    {ANALYSIS.fields.map((f, i) => (
-                      <div key={f.k} className={cn("flex items-start gap-3 border-line-soft px-5 py-3.5", i < ANALYSIS.fields.length - 1 && "border-b", i % 2 === 0 && "sm:border-r")}>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[11.5px] font-semibold text-t4">{f.k}</div>
-                          <EditableText
-                            ed={ed}
-                            k={`field.${f.k}`}
-                            original={f.v}
-                            className="mt-0.5 text-[13.5px] font-semibold text-t1"
-                            compactMark
-                          />
+                        {/* 핵심 요약 */}
+                        <ul className="flex flex-col gap-2.5">
+                          {ANALYSIS.summary2.map((s, i) => (
+                            <li key={i} className="flex gap-3 text-[13.5px] leading-relaxed text-t2">
+                              <span className="num mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-md bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-text)]">{i + 1}</span>
+                              <EditableText
+                                ed={ed}
+                                k={`summary2.${i}`}
+                                original={s}
+                                multiline
+                                className="flex-1 text-[13.5px] leading-relaxed text-t2"
+                                inputClass="text-[13px] leading-relaxed text-t2"
+                                compactMark
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* 추출된 대장 필드 — 요약의 근거 데이터 */}
+                      <div className="border-t border-line-soft">
+                        <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-5 py-2.5">
+                          <ListChecks size={14} className="text-[var(--accent)]" />
+                          <span className="text-[12.5px] font-bold text-t1">추출된 계약 대장 필드</span>
+                          <span className="num rounded-md bg-surface px-1.5 py-px text-[10.5px] font-bold text-t3">
+                            {ANALYSIS.fields.length}개
+                          </span>
+                          <span className="ml-auto text-[11px] text-t4">근거 위치 확인 · 검증 후 대장 반영</span>
                         </div>
-                        <div className="flex flex-shrink-0 items-center gap-1.5 pt-0.5">
-                          <div className="h-[5px] w-9 overflow-hidden rounded-full bg-[#eceef2]">
-                            <div className="h-full rounded-full" style={{ width: `${f.conf}%`, background: f.conf >= 95 ? "#1e7a52" : "#0f6e82" }} />
-                          </div>
-                          <span className="num text-[10.5px] font-bold text-t4">{f.conf}</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2">
+                          {ANALYSIS.fields.map((f, i) => (
+                            <div key={f.k} className={cn("flex items-start gap-3 border-line-soft px-5 py-3.5", i < ANALYSIS.fields.length - 1 && "border-b", i % 2 === 0 && "sm:border-r")}>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11.5px] font-semibold text-t4">{f.k}</div>
+                                <EditableText
+                                  ed={ed}
+                                  k={`field.${f.k}`}
+                                  original={f.v}
+                                  className="mt-0.5 text-[13.5px] font-semibold text-t1"
+                                  compactMark
+                                />
+                              </div>
+                              <div className="flex flex-shrink-0 items-center gap-1.5 pt-0.5">
+                                <div className="h-[5px] w-9 overflow-hidden rounded-full bg-[#eceef2]">
+                                  <div className="h-full rounded-full" style={{ width: `${f.conf}%`, background: f.conf >= 95 ? "#1e7a52" : "#0f6e82" }} />
+                                </div>
+                                <span className="num text-[10.5px] font-bold text-t4">{f.conf}</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  )}
+
+                  {tab === "clause" && (
+                    <div className="p-5">
+                      <div className="flex flex-col gap-2.5">
+                        {ANALYSIS.clauses.map((c) => {
+                          const lv = ed.value(`clause.${c.no}.risk`, c.risk) as keyof typeof RISK_CARD;
+                          return (
+                          <div key={c.no} className={cn("rounded-[12px] border p-3.5", RISK_CARD[lv] ?? RISK_CARD.ok)}>
+                            <div className="mb-1.5 flex items-center gap-2">
+                              <span className="num text-[12px] font-bold text-[var(--accent)]">{c.no}</span>
+                              <span className="text-[13.5px] font-bold text-t1">{c.title}</span>
+                              <span className="ml-auto flex items-center gap-1.5">
+                                <EditableChoice
+                                  ed={ed}
+                                  k={`clause.${c.no}.risk`}
+                                  original={c.risk}
+                                  options={RISK_LEVEL_OPTIONS}
+                                  compactMark
+                                >
+                                  {(v) => (
+                                    <Pill tone={RISK_TONE[v as keyof typeof RISK_TONE]}>
+                                      {RISK_LABEL[v as keyof typeof RISK_LABEL]}
+                                    </Pill>
+                                  )}
+                                </EditableChoice>
+                              </span>
+                            </div>
+                            <EditableText
+                              ed={ed}
+                              k={`clause.${c.no}.body`}
+                              original={c.body}
+                              multiline
+                              className="text-[12.8px] leading-relaxed text-t2"
+                              inputClass="text-[12.5px] leading-relaxed text-t2"
+                              compactMark
+                            />
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {c.tags.map((t) => (
+                                <Tag key={t} className={cn("text-[10.5px]", RISK_TAG[lv] ?? RISK_TAG.ok)}>#{t}</Tag>
+                              ))}
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </SectionCard>
 
