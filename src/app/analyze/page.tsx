@@ -9,10 +9,9 @@ import {
   BookCheck, Check,
 } from "lucide-react";
 import { Pill, Tag, SectionCard, FileType, ScoreRing, Bar } from "@/components/kit";
-import { ContractChat } from "@/components/contract-chat";
 import { DocumentViewer } from "@/components/document-viewer";
 import {
-  ANALYSIS, ANALYSIS_OCR, PIPELINE, PIPELINE_TOTAL_MS, SEG_LABEL, CONTRACT_TYPES, ANALYZE_QA, ANALYZE_QA_SUGGESTIONS, LEDGER_TARGET,
+  ANALYSIS, ANALYSIS_OCR, PIPELINE, PIPELINE_TOTAL_MS, SEG_LABEL, CONTRACT_TYPES, LEDGER_TARGET,
   type Seg,
 } from "@/lib/data";
 import { searchRule } from "@/lib/risk";
@@ -763,16 +762,6 @@ export default function AnalyzePage() {
                   )}
                 </SectionCard>
               </div>
-
-              {/* 선례 비교 채팅 */}
-              <ContractChat
-                title="선례 비교 Q&A"
-                sub={`${ANALYSIS.file.name} ↔ 저장된 계약 248,391건`}
-                greeting="이 계약서를 읽고 저장된 계약들과 대조해 두었습니다. 궁금한 점을 물어보시면 선례와 비교해 답하겠습니다."
-                bank={ANALYZE_QA}
-                suggestions={ANALYZE_QA_SUGGESTIONS}
-                height={440}
-              />
 
             </div>
           </div>
